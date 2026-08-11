@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Environments
+.venv/
+venv/
+
+# Runtime state — created by the app at startup
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# macOS
+.DS_Store
