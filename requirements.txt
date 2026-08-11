@@ -28,6 +28,7 @@ requests
 python-dotenv
 tiktoken
 
-# Tests
+# Tests and linting
 pytest
 httpx
+ruff==0.15.22

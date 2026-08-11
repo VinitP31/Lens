@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "data", "samples"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes: undefined names, unused imports
+    "I",   # import sorting
+    "UP",  # prefer modern Python syntax
+    "B",   # bugbear: likely bugs
+    "SIM", # simplifiable code
+]
+
+[tool.ruff.format]
+quote-style = "double"
