@@ -1,0 +1,1 @@
+"""Per-query JSONL trace."""
