@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Local agent instruction files — never published
+CLAUDE.md
+
 # Environments
 .venv/
 venv/
