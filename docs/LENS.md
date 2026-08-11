@@ -243,7 +243,7 @@ Originals must be kept because citations render the source page. Making one stor
 |---|---|
 | Docling pipeline | Standard PDF pipeline, accelerator set to auto |
 | Chunker | Docling's HybridChunker |
-| OCR engine | EasyOCR by default. Platform-specific engines allowed via config but never the default, so the repo runs on any machine |
+| OCR engine | RapidOCR by default — ships with Docling, runs on ONNX Runtime, needs no system binary. Platform-specific engines (Apple Vision via `ocrmac`, Tesseract) allowed via config but never the default, so the repo runs on any machine |
 | Page render | PyMuPDF at 150 DPI with a translucent highlight |
 | Vector index | HNSW, cosine |
 | Embeddings | `text-embedding-3-small`, 1536 dimensions |
