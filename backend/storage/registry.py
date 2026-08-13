@@ -1,1 +1,347 @@
-"""Document records and ingestion status in SQLite."""
+"""The document registry: what is in the library, and what state it is in.
+
+SQLite, one local file, standard library only. A restart loses nothing and there
+is no server to run.
+
+This module owns the `documents` table. It answers three questions the rest of
+the system keeps asking: have we seen this file before, what is its ingestion
+state, and what should a citation call it.
+"""
+
+import sqlite3
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from backend.errors import DocumentNotFoundError, DuplicateDocumentError
+from config import settings
+
+SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+
+# The ingestion stages, in the order they happen. A document is only ever left
+# in READY or DELETED; the rest are transient, and one found in a transient
+# state at startup is the wreckage of an interrupted run.
+STATUS_QUEUED = "queued"
+STATUS_VALIDATING = "validating"
+STATUS_EXTRACTING = "extracting"
+STATUS_OCR = "ocr"
+STATUS_CHUNKING = "chunking"
+STATUS_EMBEDDING = "embedding"
+STATUS_INDEXING = "indexing"
+STATUS_READY = "ready"
+STATUS_FAILED = "failed"
+STATUS_DELETED = "deleted"
+
+TERMINAL_STATUSES = frozenset({STATUS_READY, STATUS_DELETED})
+
+INGESTION_STAGES = (
+    STATUS_QUEUED,
+    STATUS_VALIDATING,
+    STATUS_EXTRACTING,
+    STATUS_OCR,
+    STATUS_CHUNKING,
+    STATUS_EMBEDDING,
+    STATUS_INDEXING,
+    STATUS_READY,
+)
+
+
+@dataclass(frozen=True)
+class Document:
+    """A row of the registry, as the rest of the system sees it."""
+
+    doc_id: str
+    display_name: str
+    original_filename: str
+    content_hash: str
+    size_bytes: int
+    status: str
+    file_path: str
+    uploaded_at: str
+    page_count: int | None = None
+    chunk_count: int = 0
+    table_count: int = 0
+    image_count: int = 0
+    chars_per_page: int | None = None
+    ocr_applied: bool = False
+    embed_model: str | None = None
+    visibility: str = "all"
+    failure_reason: str | None = None
+    deleted_at: str | None = None
+
+
+def _now() -> str:
+    """UTC, ISO 8601, to the second. Sorts correctly as a string."""
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
+
+
+def connect(path: Path | str | None = None) -> sqlite3.Connection:
+    """Open the registry, creating the schema if this is a first run.
+
+    `path` is injectable so tests can use a temporary file, and so nothing in
+    the suite can touch a real library.
+
+    Foreign keys are off by default in SQLite and have to be asked for per
+    connection. Left off, a message could reference a conversation that does not
+    exist and nothing would complain.
+    """
+    target = Path(path) if path is not None else settings.DB_PATH
+    if target != Path(":memory:"):
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+    connection = sqlite3.connect(target)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    # Survive an interrupted write rather than corrupting the file, and let a
+    # reader continue while a background ingest writes.
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.executescript(SCHEMA_PATH.read_text())
+    return connection
+
+
+def _row_to_document(row: sqlite3.Row) -> Document:
+    return Document(
+        doc_id=row["doc_id"],
+        display_name=row["display_name"],
+        original_filename=row["original_filename"],
+        content_hash=row["content_hash"],
+        size_bytes=row["size_bytes"],
+        status=row["status"],
+        file_path=row["file_path"],
+        uploaded_at=row["uploaded_at"],
+        page_count=row["page_count"],
+        chunk_count=row["chunk_count"],
+        table_count=row["table_count"],
+        image_count=row["image_count"],
+        chars_per_page=row["chars_per_page"],
+        ocr_applied=bool(row["ocr_applied"]),
+        embed_model=row["embed_model"],
+        visibility=row["visibility"],
+        failure_reason=row["failure_reason"],
+        deleted_at=row["deleted_at"],
+    )
+
+
+def find_by_hash(connection: sqlite3.Connection, content_hash: str) -> Document | None:
+    """The document with these exact bytes, deleted ones included.
+
+    Deleted ones count. A file that was uploaded and removed is still the same
+    file, and the caller decides whether that means restore or reject.
+    """
+    row = connection.execute(
+        "SELECT * FROM documents WHERE content_hash = ?", (content_hash,)
+    ).fetchone()
+    return _row_to_document(row) if row else None
+
+
+def _unique_display_name(connection: sqlite3.Connection, name: str) -> str:
+    """`Handbook.pdf`, then `Handbook (2).pdf`, and so on.
+
+    Two genuinely different PDFs can share a filename. Their hashes differ so
+    both belong in the library, but a citation naming both of them identically
+    is unreadable, so the second gets a counter.
+    """
+    taken = {
+        row["display_name"]
+        for row in connection.execute("SELECT display_name FROM documents").fetchall()
+    }
+    if name not in taken:
+        return name
+
+    stem, dot, suffix = name.rpartition(".")
+    base, extension = (stem, f"{dot}{suffix}") if dot else (name, "")
+    counter = 2
+    while f"{base} ({counter}){extension}" in taken:
+        counter += 1
+    return f"{base} ({counter}){extension}"
+
+
+def register(
+    connection: sqlite3.Connection,
+    *,
+    original_filename: str,
+    content_hash: str,
+    size_bytes: int,
+    file_path: str,
+) -> Document:
+    """Record a new document as queued, and return it.
+
+    Raises `DuplicateDocumentError` if these bytes are already known. That check
+    is a hash lookup on a unique index, so re-uploading the same file costs
+    nothing - no extraction, no embedding, no second copy answering every
+    question twice.
+    """
+    existing = find_by_hash(connection, content_hash)
+    if existing is not None:
+        raise DuplicateDocumentError(
+            f"already in the library as {existing.display_name!r}",
+            doc_id=existing.doc_id,
+        )
+
+    document = Document(
+        doc_id=uuid.uuid4().hex[:12],
+        display_name=_unique_display_name(connection, original_filename),
+        original_filename=original_filename,
+        content_hash=content_hash,
+        size_bytes=size_bytes,
+        status=STATUS_QUEUED,
+        file_path=file_path,
+        uploaded_at=_now(),
+    )
+    connection.execute(
+        """
+        INSERT INTO documents (
+            doc_id, display_name, original_filename, content_hash,
+            size_bytes, status, file_path, uploaded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            document.doc_id,
+            document.display_name,
+            document.original_filename,
+            document.content_hash,
+            document.size_bytes,
+            document.status,
+            document.file_path,
+            document.uploaded_at,
+        ),
+    )
+    connection.commit()
+    return document
+
+
+def get(connection: sqlite3.Connection, doc_id: str, *, include_deleted: bool = False) -> Document:
+    """One document by id. Raises rather than returning None.
+
+    A missing document is a real error at every call site in the system, so it
+    is raised once here instead of being re-checked everywhere.
+    """
+    row = connection.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
+    if row is None:
+        raise DocumentNotFoundError(f"no document {doc_id!r}")
+
+    document = _row_to_document(row)
+    if document.deleted_at is not None and not include_deleted:
+        raise DocumentNotFoundError(f"document {doc_id!r} was deleted")
+    return document
+
+
+def list_documents(connection: sqlite3.Connection, *, ready_only: bool = False) -> list[Document]:
+    """The library, newest first. Deleted documents are never included.
+
+    `ready_only` is what the retrieval scope and the UI picker want: a document
+    still being ingested must not be offered as searchable, because searching it
+    would silently miss most of its content.
+    """
+    query = "SELECT * FROM documents WHERE deleted_at IS NULL"
+    parameters: tuple[str, ...] = ()
+    if ready_only:
+        query += " AND status = ?"
+        parameters = (STATUS_READY,)
+    query += " ORDER BY uploaded_at DESC, doc_id"
+
+    return [_row_to_document(row) for row in connection.execute(query, parameters).fetchall()]
+
+
+def set_status(
+    connection: sqlite3.Connection,
+    doc_id: str,
+    status: str,
+    *,
+    failure_reason: str | None = None,
+) -> None:
+    """Move a document to the next ingestion stage.
+
+    The status is what the upload progress display reads, so it is written as
+    each stage begins rather than batched at the end.
+    """
+    connection.execute(
+        "UPDATE documents SET status = ?, failure_reason = ? WHERE doc_id = ?",
+        (status, failure_reason, doc_id),
+    )
+    connection.commit()
+
+
+def mark_ready(
+    connection: sqlite3.Connection,
+    doc_id: str,
+    *,
+    page_count: int,
+    chunk_count: int,
+    table_count: int = 0,
+    image_count: int = 0,
+    chars_per_page: int | None = None,
+    ocr_applied: bool = False,
+    embed_model: str | None = None,
+) -> Document:
+    """Record the results of a successful ingest and make the document usable.
+
+    The embedding model is stored per document on purpose. If the configured
+    model ever changes, mixing its vectors with the old ones wrecks retrieval
+    with no error message anywhere, so what was actually used has to be on
+    record to be checked against.
+    """
+    connection.execute(
+        """
+        UPDATE documents SET
+            status = ?, page_count = ?, chunk_count = ?, table_count = ?,
+            image_count = ?, chars_per_page = ?, ocr_applied = ?,
+            embed_model = ?, failure_reason = NULL
+        WHERE doc_id = ?
+        """,
+        (
+            STATUS_READY,
+            page_count,
+            chunk_count,
+            table_count,
+            image_count,
+            chars_per_page,
+            int(ocr_applied),
+            embed_model or settings.EMBEDDING_MODEL,
+            doc_id,
+        ),
+    )
+    connection.commit()
+    return get(connection, doc_id)
+
+
+def soft_delete(connection: sqlite3.Connection, doc_id: str) -> None:
+    """Remove a document from the library without destroying its history.
+
+    The row and the file stay. An answer given last week cites this document by
+    page and coordinates, and that citation must keep working after the document
+    is removed from the library.
+    """
+    document = get(connection, doc_id)
+    connection.execute(
+        "UPDATE documents SET status = ?, deleted_at = ? WHERE doc_id = ?",
+        (STATUS_DELETED, _now(), document.doc_id),
+    )
+    connection.commit()
+
+
+def discard(connection: sqlite3.Connection, doc_id: str) -> None:
+    """Delete the row outright. For a failed ingest, not for a user deletion.
+
+    A document that failed part-way through is not a library entry: it would
+    answer some questions and silently skip the rest of its own content, which
+    is worse than not being there. The row goes, and the failure survives in the
+    trace log instead.
+    """
+    connection.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
+    connection.commit()
+
+
+def unfinished(connection: sqlite3.Connection) -> list[Document]:
+    """Documents left mid-ingestion, which means a previous run was interrupted.
+
+    Called at startup. Each one is wreckage: its chunks may be partly written,
+    so it is cleaned up rather than resumed.
+    """
+    placeholders = ", ".join("?" for _ in TERMINAL_STATUSES)
+    rows = connection.execute(
+        f"SELECT * FROM documents WHERE status NOT IN ({placeholders}) AND deleted_at IS NULL",
+        tuple(TERMINAL_STATUSES),
+    ).fetchall()
+    return [_row_to_document(row) for row in rows]
