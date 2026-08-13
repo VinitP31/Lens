@@ -26,7 +26,7 @@ requests
 
 # Utilities
 python-dotenv
-tiktoken
+tiktoken==0.13.0
 
 # Tests and linting
 pytest

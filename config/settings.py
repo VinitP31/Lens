@@ -185,6 +185,49 @@ COLUMN_WIDTH_SIMILARITY = 0.7
 # cells set fractionally apart still order left to right.
 ROW_BAND = 2.0
 
+# --- Embedding model -----------------------------------------------------
+# Named here because the tokenizer used to measure chunk size must be the one
+# the embedding model actually uses. Measuring with a different tokenizer means
+# chunks are the wrong size in the only unit that matters.
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = 1536
+
+# Hard input ceiling of the embedding model. Text beyond this is not truncated
+# by us and not accepted by the model, so a chunk over this limit cannot be
+# indexed at all. Tables are otherwise never split, but a table nobody can embed
+# is worse than a table split at its row boundaries.
+EMBED_MAX_INPUT_TOKENS = 8191
+
+# --- Chunking ------------------------------------------------------------
+# Sizes are in tokens, never characters. The same passage can differ three or
+# four times over in tokens depending on whether it is prose, a table of
+# numbers, or a run of codes, so a character limit produces chunks of wildly
+# different real sizes.
+
+# Where a chunk is aimed. Large enough to keep its subject, small enough that
+# the embedding describes one topic rather than the average of several.
+CHUNK_TARGET_TOKENS = 500
+
+# Text repeated from the end of the previous chunk. An answer that straddles a
+# boundary is then whole in at least one chunk. 15% of target.
+CHUNK_OVERLAP_TOKENS = 75
+
+# Below this a chunk has lost its subject: "employees get 18 days" does not say
+# of what, or for whom. A short trailing chunk is merged back into the one
+# before it instead of being stored on its own.
+CHUNK_MIN_TOKENS = 120
+
+# Hard ceiling. A single element longer than this is split even though that
+# means splitting inside a section.
+CHUNK_MAX_TOKENS = 800
+
+# Separator between the parts of a chunk's context header, and the header's
+# page marker. The header is embedded with the chunk, so a question phrased in
+# the heading's words matches even when the body uses different words.
+CONTEXT_SEPARATOR = " > "
+CONTEXT_PAGE_PREFIX = "p."
+
 # --- OCR -----------------------------------------------------------------
 # OCR is conditional, never on by default: it roughly triples ingestion time,
 # and its output is a guess where a real text layer is exact.
