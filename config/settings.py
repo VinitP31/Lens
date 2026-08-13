@@ -203,6 +203,27 @@ EMBEDDING_DIMENSIONS = 1536
 # is worse than a table split at its row boundaries.
 EMBED_MAX_INPUT_TOKENS = 8191
 
+# --- Vector store --------------------------------------------------------
+# Milvus Lite: a local file, no server to run.
+
+MILVUS_PATH = VECTOR_DIR / "chunks.db"
+MILVUS_COLLECTION = "chunks"
+
+# Cosine, because the embeddings are already normalised, so only direction
+# carries meaning and magnitude is noise.
+#
+# Read this before touching the gate: with the COSINE metric Milvus puts the
+# cosine SIMILARITY in the field it calls `distance`. Higher is closer, and an
+# identical vector scores +1.0, an unrelated one 0.0, an opposite one -1.0.
+# Measured, not assumed. Subtracting it from 1 would inverse the gate.
+MILVUS_METRIC = "COSINE"
+MILVUS_INDEX_TYPE = "HNSW"
+
+# Field widths. A section path can be deep, and a chunk can be a whole table.
+MILVUS_SECTION_PATH_MAX = 1024
+MILVUS_TEXT_MAX = 65535
+MILVUS_ID_MAX = 80
+
 # --- Chunking ------------------------------------------------------------
 # Sizes are in tokens, never characters. The same passage can differ three or
 # four times over in tokens depending on whether it is prose, a table of
@@ -231,6 +252,14 @@ CHUNK_MAX_TOKENS = 800
 # the heading's words matches even when the body uses different words.
 CONTEXT_SEPARATOR = " > "
 CONTEXT_PAGE_PREFIX = "p."
+
+# --- Retrieval -----------------------------------------------------------
+# Over-fetch, then narrow. Overlap deliberately makes neighbouring chunks
+# near-duplicates, so asking for exactly what will be used spends slots on
+# repeats of the same passage.
+
+RETRIEVE_CANDIDATES = 12
+CONTEXT_CHUNKS = 5
 
 # --- OCR -----------------------------------------------------------------
 # OCR is conditional, never on by default: it roughly triples ingestion time,

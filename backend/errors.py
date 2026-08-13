@@ -59,3 +59,20 @@ class DocumentNotFoundError(LensError):
     """No document with this id, or it has been deleted."""
 
     code = "document_not_found"
+
+
+class EmbedModelMismatchError(LensError):
+    """The configured embedding model is not the one the collection was built with.
+
+    Refuse to start rather than carry on. Vectors from two different models
+    occupy different spaces, so mixing them wrecks retrieval while every part of
+    the system reports success. Nothing else in Lens fails this quietly.
+    """
+
+    code = "embed_model_mismatch"
+
+
+class VectorStoreError(LensError):
+    """The vector store could not be opened or written."""
+
+    code = "vector_store_error"

@@ -1,10 +1,14 @@
 # Python 3.11 / 3.12
+#
+# A package is pinned once it has actually been installed and exercised. The
+# unpinned ones below belong to build stages that do not exist yet; pinning a
+# version nobody has run would be inventing a number rather than recording one.
 
 # Backend
 fastapi
 uvicorn[standard]
-pydantic
-pydantic-settings
+pydantic==2.13.4
+pydantic-settings==2.15.0
 python-multipart
 sse-starlette
 
@@ -18,17 +22,17 @@ docling==2.119.0
 pymupdf==1.28.2
 
 # Vector store
-pymilvus
+pymilvus[milvus_lite]==3.0.1
 
 # UI
 streamlit
-requests
+requests==2.34.2
 
 # Utilities
-python-dotenv
+python-dotenv==1.2.2
 tiktoken==0.13.0
 
 # Tests and linting
-pytest
-httpx
+pytest==9.1.1
+httpx==0.28.1
 ruff==0.15.22
