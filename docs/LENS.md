@@ -233,7 +233,7 @@ Originals must be kept because citations render the source page. Making one stor
 | Vector store | Milvus | Chroma, FAISS | Same client for the local file and a server, so no migration later. FAISS stores only vectors, so you'd need a separate metadata store and no filtered search |
 | App state | SQLite | PostgreSQL | One file, no setup, transactional, plenty at this scale |
 | Embeddings | `text-embedding-3-small` | `text-embedding-3-large` | Retrieval quality isn't the bottleneck on clear English prose. Larger doubles storage and memory for a gain you can't measure here |
-| LLM | `gpt-4o-mini` | Larger model | The confidence gate removes the need for the model to refuse well, which is the main difference. Cost is negligible either way |
+| LLM | `gpt-4o-mini` | Larger model | The gate removes the need to refuse *off-topic* questions, but measurement shows it cannot catch on-topic questions whose answer is absent, so refusal behaviour still matters and is compared on the evaluation sets. Cost is negligible either way |
 | UI | Streamlit | React, Next.js | Chat, streaming, sidebar, dialog, and multiselect are built in. Required stack anyway |
 | Tests | pytest | unittest | Fixtures and temp paths |
 
@@ -746,7 +746,27 @@ Measured, not guessed. A guessed threshold is an unfalsifiable claim.
 
 Which error to prefer is a product decision, not a statistical one. For company policy documents, wrongly refusing is much better than wrongly answering, so set the threshold on the conservative side. Write down the value *and* the reason.
 
-**If out-of-scope refusal isn't reliable, raise the threshold — don't change the model.** Refusal logic belongs in code. Moving it into model choice takes a solved problem and makes it unsolved.
+**What the measurement actually showed.** Step 3 above assumes the two groups separate. On this corpus they do not — they overlap by 0.226:
+
+| | Lowest | Mean | Highest |
+|---|---|---|---|
+| Answerable, 24 questions | +0.496 | +0.650 | +0.787 |
+| Unanswerable, 17 questions | +0.392 | +0.550 | +0.723 |
+
+There is no gap to pick a number in, because the two sets are not measuring what step 3 assumed. Similarity answers *"is this passage about the topic?"*, and an unanswerable question can be perfectly on topic: *"Which vendor was awarded RFP 26-004?"* scores +0.723 by retrieving the award section, which is the right passage and names no winner because no award has been made. Meanwhile *"How are the 100 evaluation points weighted?"* scores +0.496, because its answer is a table of bare numbers sharing almost no wording with the question.
+
+The cost of each choice, measured:
+
+| Threshold | Refuses a real answer | Answers an absent one |
+|---|---|---|
+| 0.48 | 0 of 24 | 12 of 17 |
+| 0.54 | 1 of 24 | 8 of 17 |
+| 0.60 | 7 of 24 | 7 of 17 |
+| 0.74 | 20 of 24 | 0 of 17 |
+
+Refusing every unanswerable question requires 0.74, which refuses 83% of the real ones. So the threshold is set where it loses no real answers, and the remaining cases are the prompt's abstention rule to catch — which is where the failure table already assigns them.
+
+**If out-of-scope refusal isn't reliable, raise the threshold — don't change the model.** That holds for questions the corpus has nothing on, which is what the threshold governs. It does not hold for on-topic questions with absent answers: no threshold separates those, so raising it only refuses real answers. Those are the model's to refuse, and its refusal rate is measured on the out-of-scope set rather than assumed.
 
 ### Citation validation
 
@@ -1297,6 +1317,7 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | Generation isn't byte-identical at temp 0 | Hosted inference behaviour | Wording may vary slightly | None. Retrieval and citations stay identical |
 | A table beyond the embedding input limit is split | The model accepts 8191 tokens, and a chunk above that cannot be indexed at all | A very large table is cited as more than one chunk. Header rows are repeated into each part, so no part loses its column names | Cross-page and cross-chunk table stitching at retrieval time |
 | No overlap across a section boundary | Overlap is carried inside a section only, because a chunk spanning two sections could not name one section in its citation | An answer straddling two sections is whole in neither chunk | Carry a tail across the boundary and accept the weaker citation |
+| The gate cannot catch an on-topic question whose answer is absent | Similarity measures whether a passage is about the topic, not whether it holds the fact | Measured on this corpus: 12 of 17 unanswerable questions score above a threshold that loses no real answers | None at the gate. Caught by the prompt's abstention rule, whose refusal rate is measured on the out-of-scope set |
 | Short subsections become short chunks | Structure-first honours the document's own granularity, and a one-paragraph subsection is one chunk | Many small chunks compete against larger ones for a retrieval slot. On one sample manual, 31 of 53 prose chunks were under the 120-token minimum | Merge sibling subsections under a shared parent, only if measurement shows a cost |
 
 ---
@@ -1409,7 +1430,7 @@ Vectors from two models aren't comparable, and mixing them wrecks retrieval with
 Retrieval quality isn't the bottleneck on clear single-language prose where questions and sources share vocabulary. Measured misses come from chunk boundaries, tables, and rare identifiers — none of which a bigger embedding fixes. *Rejected:* `3-large` by default. *Costs:* a possible small ceiling, detectable by evaluation and fixable with one config change plus a reindex.
 
 **D-22 · `gpt-4o-mini`, with the answer model validated by measurement.**
-Utility tasks are mechanical. For answering, the gate already removes the need for good refusal behaviour, which is the main capability difference. Cost is negligible either way, so the choice is settled by running the eval sets and comparing. *Rejected:* the biggest model by default; one model with no measurement. *Costs:* one comparison run.
+Utility tasks are mechanical. For answering, refusal behaviour is the main capability difference, and it matters more than first assumed: the gate handles off-topic questions but measurement shows most on-topic questions with absent answers score above any usable threshold, so the model's own abstention carries them. Cost is negligible either way, so the choice is settled by running the eval sets and comparing. *Rejected:* the biggest model by default; one model with no measurement. *Costs:* one comparison run.
 
 **D-23 · No document-specific logic anywhere.**
 Lens must work on an unseen PDF with no code changes. Any behaviour that depends on properties of a particular corpus is a bug, however well it performs on the documents at hand. *Rejected:* corpus-specific heading patterns. *Costs:* generic detection is less accurate on any one document than a tailored rule. Accepted.
@@ -1472,7 +1493,9 @@ Log top similarities across both question sets, look at the distributions, pick 
 
 Prompt assembly, grounded generation, streaming, citation validation and resolution. Full eval including citation accuracy.
 
-**Gate:** end-to-end answers with validated citations and a complete metrics table.
+**Gate:** end-to-end answers with validated citations and a complete metrics table, including a **measured abstention rate on the out-of-scope set**.
+
+That last number is not optional. Calibration at Stage 4 showed the confidence gate cannot catch an on-topic question whose answer is absent, so the prompt's abstention rule is the only thing standing between those questions and a confident, well-cited, invented answer. Treating it as a prompt instruction and assuming it works would leave half the system's correctness unmeasured.
 
 At this point the system works. Everything before is foundation, everything after is interface and hardening.
 
