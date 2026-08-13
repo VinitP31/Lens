@@ -1,0 +1,161 @@
+"""Run every check in one command.
+
+    python scripts/check.py              lint, format, tests        (fast)
+    python scripts/check.py --corpus     also audit the real PDFs   (slow)
+
+The fast checks are what to run after every change. The corpus audit re-extracts
+all six sample PDFs, which takes a couple of minutes, and is what to run before
+committing anything that touches extraction or chunking.
+
+The corpus audit exists because a green test suite cannot see these problems.
+Every test uses a generated fixture PDF; the invariants below are checked against
+real documents, and each one of them has caught a real defect at least once.
+"""
+
+import argparse
+import logging
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+PASS = "  ok  "
+FAIL = " FAIL "
+
+
+def _run(label: str, command: list[str]) -> bool:
+    """Run a command, print one line, keep its output only if it failed."""
+    result = subprocess.run(command, capture_output=True, text=True)
+    ok = result.returncode == 0
+    print(f"[{PASS if ok else FAIL}] {label}")
+    if not ok:
+        output = (result.stdout + result.stderr).strip()
+        print("\n".join(f"         {line}" for line in output.splitlines()[-25:]))
+    return ok
+
+
+def fast_checks() -> bool:
+    python = sys.executable
+    return all(
+        [
+            _run("ruff check", [python, "-m", "ruff", "check", "."]),
+            _run("ruff format", [python, "-m", "ruff", "format", "--check", "."]),
+            _run("pytest", [python, "-m", "pytest", "tests/", "-q"]),
+        ]
+    )
+
+
+def corpus_audit(sample_dir: Path) -> bool:
+    """Check the invariants that only real documents can break."""
+    logging.disable(logging.WARNING)
+    from backend.ingestion import chunker, extractor
+    from config import settings
+
+    pdfs = sorted(sample_dir.glob("*.pdf"))
+    if not pdfs:
+        print(f"[{FAIL}] corpus audit: no PDFs in {sample_dir}")
+        return False
+
+    def flat(text: str) -> str:
+        return " ".join(text.split())
+
+    print(f"\n{'document':<34}{'pages':>6}{'chunks':>7}{'tokens med/max':>16}")
+    failures: list[str] = []
+
+    for path in pdfs:
+        document = extractor.extract(path)
+        chunks = chunker.chunk(document, title=path.stem)
+        name = path.stem[:32]
+
+        sizes = sorted(chunk.token_count for chunk in chunks)
+        print(
+            f"{name:<34}{document.page_count:>6}{len(chunks):>7}"
+            f"{f'{sizes[len(sizes) // 2]}/{sizes[-1]}':>16}"
+        )
+
+        def note(problem: str, detail: str, document_name: str = name) -> None:
+            failures.append(f"{document_name}: {problem} ({detail})")
+
+        # Text must not be lost. Two things are dropped on purpose and are not
+        # losses: a contents page, and a heading, which lives in the section path
+        # of the chunks beneath it rather than in any chunk body.
+        bodies = " || ".join(flat(chunk.text) for chunk in chunks)
+        paths = " || ".join(flat(chunk.section_path) for chunk in chunks)
+        lost = [
+            element
+            for element in document.elements
+            if flat(element.text)
+            and element.page not in document.contents_pages
+            and flat(element.text) not in bodies
+            and flat(element.text) not in paths
+        ]
+        if lost:
+            note("text lost", f"{len(lost)} elements, first on p{lost[0].page}")
+
+        # A chunk cites one page, so its text must be on that page.
+        on_page: dict[int, str] = {}
+        for element in document.elements:
+            on_page[element.page] = on_page.get(element.page, "") + " " + flat(element.text)
+        mixed = [
+            c
+            for c in chunks
+            if flat(c.text)[:40] and flat(c.text)[:40] not in on_page.get(c.page, "")
+        ]
+        if mixed:
+            note("text filed under the wrong page", f"{len(mixed)} chunks, first p{mixed[0].page}")
+
+        # Citations need coordinates.
+        if boxless := [c for c in chunks if not c.bboxes]:
+            note("no bounding boxes", f"{len(boxless)} chunks")
+
+        # Sizes must respect the settings, tables excepted by design.
+        prose = [c for c in chunks if c.element_type == extractor.TYPE_TEXT]
+        if over := [c for c in prose if c.token_count > settings.CHUNK_MAX_TOKENS]:
+            note(
+                "prose over the ceiling",
+                f"{len(over)} chunks, largest {max(c.token_count for c in over)}",
+            )
+        if huge := [c for c in chunks if c.token_count > settings.EMBED_MAX_INPUT_TOKENS]:
+            note("chunk too large to embed", f"{len(huge)} chunks")
+
+        # Nothing empty, and every id sequential from zero.
+        if [c for c in chunks if not c.text.strip()]:
+            note("empty chunk", "would embed to noise")
+        if [c.index for c in chunks] != list(range(len(chunks))):
+            note("chunk indexes not sequential", "breaks the deterministic chunk id")
+
+        # Contents pages are deliberately excluded from the index.
+        if leaked := [c for c in chunks if c.page in document.contents_pages]:
+            note("contents page indexed", f"pages {sorted({c.page for c in leaked})}")
+
+    print()
+    if failures:
+        print(f"[{FAIL}] corpus audit")
+        for failure in failures:
+            print(f"         {failure}")
+        return False
+    print(f"[{PASS}] corpus audit: {len(pdfs)} documents, every invariant holds")
+    return True
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run every check.")
+    parser.add_argument(
+        "--corpus",
+        action="store_true",
+        help="also re-extract the sample PDFs and audit them (slow)",
+    )
+    parser.add_argument("--samples", type=Path, default=Path("samples"))
+    args = parser.parse_args()
+
+    ok = fast_checks()
+    if args.corpus:
+        ok = corpus_audit(args.samples) and ok
+
+    print("\nall checks passed" if ok else "\nsomething failed, see above")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

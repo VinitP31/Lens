@@ -24,11 +24,19 @@ uvicorn backend.main:app --reload      # backend, port 8000
 streamlit run frontend/app.py          # UI, port 8501
 ```
 
-## Tests
+## Checks
+
+One command runs everything:
 
 ```bash
-pytest
+python scripts/check.py            # lint, format, tests
+python scripts/check.py --corpus   # also re-audits the sample PDFs (slow)
 ```
+
+Run the fast checks after every change. Run `--corpus` before committing anything that
+touches extraction or chunking: it re-extracts the real documents and asserts what a
+fixture-based test cannot see — no text lost, no chunk filed under the wrong page, every
+chunk carrying coordinates, no contents page indexed.
 
 ## Evaluation
 
