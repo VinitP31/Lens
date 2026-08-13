@@ -273,6 +273,20 @@ CONTEXT_PAGE_PREFIX = "p."
 RETRIEVE_CANDIDATES = 12
 CONTEXT_CHUNKS = 5
 
+# Two chunks are the same passage twice when one literally repeats a run of the
+# other's words - which is exactly what the overlap window produces, since it
+# copies whole sentences from one chunk into the next.
+#
+# Measured as the longest run of consecutive shared words, not as a proportion of
+# vocabulary. A proportion collapses short chunks that merely share ordinary
+# words: "The minimum password length is twelve characters" and "The session idle
+# timeout is twenty minutes" have most of their vocabulary in common and are
+# entirely different facts.
+#
+# The overlap window is 75 tokens, roughly 55 words, so a run this long is well
+# inside a real overlap while being far too long to occur by coincidence.
+DEDUPE_MIN_SHARED_WORDS = 12
+
 # --- OCR -----------------------------------------------------------------
 # OCR is conditional, never on by default: it roughly triples ingestion time,
 # and its output is a guess where a real text layer is exact.
