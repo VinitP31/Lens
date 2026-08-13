@@ -242,7 +242,7 @@ Originals must be kept because citations render the source page. Making one stor
 | Concern | Pinned |
 |---|---|
 | Docling pipeline | Standard PDF pipeline, accelerator set to auto |
-| Chunker | Docling's HybridChunker |
+| Chunker | Structure-first chunker over the extracted elements. HybridChunker was dropped: it has no overlap parameter, and it consumes the `DoclingDocument`, so it would bypass the extractor's glyph repair, positional section paths and reading-order correction |
 | OCR engine | RapidOCR by default — ships with Docling, runs on ONNX Runtime, needs no system binary. Platform-specific engines (Apple Vision via `ocrmac`, Tesseract) allowed via config but never the default, so the repo runs on any machine |
 | Page render | PyMuPDF at 150 DPI with a translucent highlight |
 | Vector index | HNSW, cosine |
@@ -264,7 +264,7 @@ This is the biggest single decision in the stack, because one dependency covers 
 | Two-column reading order | Layout analysis |
 | Header and footer removal | `content_layer` flag |
 | OCR | Pluggable OCR backend |
-| Structure-aware chunking | HybridChunker |
+| Structure-aware chunking | Element provenance, fed to our own chunker |
 
 Doing this by hand means font-size heuristics for headings, rule-based table detection, manual reading-order sorting, frequency analysis to find repeating headers, and separate OCR wiring. That's a lot of fragile code replaced by config.
 
@@ -1287,6 +1287,9 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | A deep document can crowd a topic | Chunk-level competition | The more authoritative source may get pushed out | Per-document cap |
 | No permissions | Single-tenant scope decision | Everyone sees everything | Login + the reserved `visibility` filter |
 | Generation isn't byte-identical at temp 0 | Hosted inference behaviour | Wording may vary slightly | None. Retrieval and citations stay identical |
+| A table beyond the embedding input limit is split | The model accepts 8191 tokens, and a chunk above that cannot be indexed at all | A very large table is cited as more than one chunk. Header rows are repeated into each part, so no part loses its column names | Cross-page and cross-chunk table stitching at retrieval time |
+| No overlap across a section boundary | Overlap is carried inside a section only, because a chunk spanning two sections could not name one section in its citation | An answer straddling two sections is whole in neither chunk | Carry a tail across the boundary and accept the weaker citation |
+| Short subsections become short chunks | Structure-first honours the document's own granularity, and a one-paragraph subsection is one chunk | Many small chunks compete against larger ones for a retrieval slot. On one sample manual, 31 of 53 prose chunks were under the 120-token minimum | Merge sibling subsections under a shared parent, only if measurement shows a cost |
 
 ---
 
@@ -1301,6 +1304,8 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | Cross-page table stitching | Fragmented multi-page tables |
 | Reindex a failed document | Recovery without re-uploading |
 | Show answer confidence | Surfaces the margin above the threshold |
+| Sibling-subsection merging | Short chunks competing for retrieval slots, if Stage 3 shows a cost |
+| Overlap across section boundaries | Answers that straddle two sections |
 
 ### Later
 
