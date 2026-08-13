@@ -51,10 +51,10 @@ class Chunk:
     section_path: str
     element_type: str
     token_count: int
-    # Boxes for the highlight, on `page` only. A chunk that runs across a page
-    # break is cited at the page it starts on, so boxes from the continuation
-    # are not carried: they would highlight a region of a page the citation
-    # does not point at.
+    # Boxes for the highlight. All of them are on `page`, because a chunk never
+    # holds text from more than one page: a citation resolves to one page and one
+    # set of coordinates on it, so text from the next page filed under this
+    # chunk would open a page that text is not on.
     bboxes: list[tuple[float, float, float, float]] = field(default_factory=list)
     # Set once the document has a name. Held on the chunk rather than rebuilt
     # later so that what was embedded is exactly what is stored.
@@ -272,6 +272,13 @@ def _chunk_group(group: list[Element], counter: TokenCounter) -> list[_Pending]:
                 )
             continue
 
+        # A chunk belongs to exactly one page, because a citation resolves to one
+        # page and one set of coordinates on it. Merging text from the next page
+        # into this chunk would file that text under this chunk's page number,
+        # and clicking the citation would open a page the text is not on.
+        if current is not None and element.page != current.page:
+            close()
+
         for part in _split_oversized(element.text, counter):
             if current is not None:
                 candidate = f"{current.text}\n{part}"
@@ -280,14 +287,15 @@ def _chunk_group(group: list[Element], counter: TokenCounter) -> list[_Pending]:
                     close()
                 else:
                     current.texts.append(part)
-                    # Only boxes on the chunk's own page are useful for the
-                    # highlight; the citation points at that page.
-                    if element.page == current.page:
-                        current.bboxes.extend(element.bboxes)
+                    current.bboxes.extend(element.bboxes)
                     continue
 
             starter = [part]
-            if out and out[-1].element_type == TYPE_TEXT:
+            # Overlap only within a page. Repeating the previous page's closing
+            # sentences here would put text on this chunk that is not on the page
+            # this chunk cites, and it would also make the previous chunk look
+            # like a redundant copy of this one.
+            if out and out[-1].element_type == TYPE_TEXT and out[-1].page == element.page:
                 tail = _tail(out[-1].text, counter)
                 # Only worth repeating if it does not swallow the whole budget.
                 if tail and counter(f"{tail}\n{part}") <= settings.CHUNK_MAX_TOKENS:
@@ -320,14 +328,18 @@ def _merge_short_tail(pending: list[_Pending], counter: TokenCounter) -> list[_P
         return pending
     if counter(last.text) >= settings.CHUNK_MIN_TOKENS:
         return pending
+    # Never across a page break: the merged chunk would carry the earlier page's
+    # number while holding text from the later page, so its citation would open
+    # the wrong page.
+    if last.page != previous.page:
+        return pending
 
     merged = f"{previous.text}\n{last.text}"
     if counter(merged) > settings.CHUNK_MAX_TOKENS:
         return pending
 
     previous.texts.append(last.text)
-    if last.page == previous.page:
-        previous.bboxes.extend(last.bboxes)
+    previous.bboxes.extend(last.bboxes)
     return pending[:-1]
 
 
@@ -402,8 +414,17 @@ def chunk(
     """
     counter = counter or count_tokens
 
+    # A contents page holds the vocabulary of every topic in the document and the
+    # answer to none of them, so it scores respectably against many questions and
+    # satisfies none. The extractor identifies those pages but leaves their
+    # elements in place, because whether to index them is a chunking decision,
+    # not an extraction one.
+    elements = [
+        element for element in document.elements if element.page not in document.contents_pages
+    ]
+
     pending: list[_Pending] = []
-    for group in _groups(document.elements):
+    for group in _groups(elements):
         pending.extend(_merge_short_tail(_chunk_group(group, counter), counter))
     pending = _drop_redundant(pending, counter)
 

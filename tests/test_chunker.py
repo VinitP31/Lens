@@ -55,7 +55,9 @@ def element(
     )
 
 
-def document(elements: list[Element], page_count: int = 3) -> ExtractedDocument:
+def document(
+    elements: list[Element], page_count: int = 3, contents_pages: frozenset[int] = frozenset()
+) -> ExtractedDocument:
     return ExtractedDocument(
         page_count=page_count,
         elements=elements,
@@ -64,6 +66,7 @@ def document(elements: list[Element], page_count: int = 3) -> ExtractedDocument:
         dropped_count=0,
         heading_count=1,
         seconds=0.1,
+        contents_pages=contents_pages,
     )
 
 
@@ -110,6 +113,36 @@ def test_the_same_heading_far_apart_is_not_joined():
     )
 
     assert len(chunks) == 3
+
+
+def test_a_contents_page_is_never_indexed():
+    """Found by the corpus audit, not by any unit test: the extractor marks
+    contents pages and the profiler printed "excluded from indexing", but nothing
+    excluded them, so four of six sample documents had one in the index.
+
+    A contents page holds the vocabulary of every topic and the answer to none,
+    so it scores respectably against many questions and satisfies none."""
+    chunks = chunker.chunk(
+        document(
+            [
+                element("About This Manual\nSystem Overview\nGetting Started", page=2),
+                element(sentences(30), page=3),
+            ],
+            contents_pages=frozenset({2}),
+        ),
+        title="Manual",
+        counter=words,
+    )
+
+    assert all(item.page != 2 for item in chunks)
+    assert chunks
+    assert all("System Overview" not in item.text for item in chunks)
+
+
+def test_a_document_with_no_contents_page_is_unaffected():
+    chunks = chunk([element(sentences(30), page=2)])
+
+    assert len(chunks) == 1
 
 
 # --- Per-element rules ---------------------------------------------------
@@ -384,19 +417,67 @@ def test_page_and_boxes_are_carried_through():
     assert chunks[0].bboxes == [(1.0, 2.0, 3.0, 4.0)]
 
 
-def test_a_chunk_spanning_a_page_break_keeps_only_its_own_page_boxes():
-    """The citation points at the starting page, so boxes from the next page
-    would highlight a region of a page nobody is looking at."""
+def test_a_chunk_never_holds_text_from_two_pages():
+    """Found by the end-to-end test, not by any unit test: two paragraphs under
+    one heading on consecutive pages were merged, and the chunk was stamped with
+    the first page. A citation to the second paragraph opened the wrong page."""
     chunks = chunk(
         [
-            element(sentences(3), page=4, bboxes=[(1.0, 1.0, 2.0, 2.0)]),
-            element(sentences(3), page=5, bboxes=[(9.0, 9.0, 9.0, 9.0)]),
+            element("Page one says approval takes fourteen days.", page=1),
+            element("Page two says the balance is forfeited.", page=2),
         ]
     )
 
-    assert len(chunks) == 1
-    assert chunks[0].page == 4
-    assert (9.0, 9.0, 9.0, 9.0) not in chunks[0].bboxes
+    assert len(chunks) == 2
+    assert chunks[0].page == 1 and "fourteen" in chunks[0].text
+    assert chunks[1].page == 2 and "forfeited" in chunks[1].text
+
+
+def test_a_short_leftover_is_not_merged_across_a_page_break():
+    """The same bug by the other route: merging a short tail backwards would file
+    the later page's text under the earlier page's number."""
+    chunks = chunk(
+        [
+            element(sentences(48, start=0), page=1),
+            element("Short closing line on the next page.", page=2),
+        ]
+    )
+
+    assert chunks[-1].page == 2
+    assert "Short closing line" in chunks[-1].text
+
+
+def test_every_boxs_page_matches_its_chunks_page():
+    """Boxes are coordinates on one page. A chunk holding boxes from another page
+    would highlight a region of a page the citation does not open."""
+    chunks = chunk(
+        [
+            element(sentences(3, start=0), page=4, bboxes=[(1.0, 1.0, 2.0, 2.0)]),
+            element(sentences(3, start=10), page=5, bboxes=[(9.0, 9.0, 9.0, 9.0)]),
+        ]
+    )
+
+    by_page = {item.page: item.bboxes for item in chunks}
+
+    assert by_page[4] == [(1.0, 1.0, 2.0, 2.0)]
+    assert by_page[5] == [(9.0, 9.0, 9.0, 9.0)]
+
+
+def test_overlap_is_not_carried_across_a_page_break():
+    """Repeating the previous page's sentences would put text in this chunk that
+    is not on the page it cites, and would make the previous chunk look like a
+    redundant duplicate of this one - which deleted it outright."""
+    chunks = chunk(
+        [
+            element(sentences(60, start=0), page=1),
+            element(sentences(6, start=500), page=2),
+        ]
+    )
+
+    page_two = [item for item in chunks if item.page == 2]
+
+    assert page_two
+    assert all("Sentence 0 " not in item.text for item in page_two)
 
 
 def test_no_chunk_is_empty_or_whitespace_only():
