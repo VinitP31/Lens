@@ -273,6 +273,41 @@ CONTEXT_PAGE_PREFIX = "p."
 RETRIEVE_CANDIDATES = 12
 CONTEXT_CHUNKS = 5
 
+# --- The confidence gate -------------------------------------------------
+# Compared against `Hit.similarity`, which is already oriented so that higher
+# means closer. Never against a raw Milvus score.
+#
+# MEASURED, not chosen by taste. From 24 answerable and 17 unanswerable
+# questions run against the real index:
+#
+#   answerable    lowest +0.496   mean +0.650   highest +0.787
+#   unanswerable  lowest +0.392   mean +0.550   highest +0.723
+#
+# The two sets overlap, so no value separates them. What each costs:
+#
+#   0.45  refuses 0 of 24 real answers, lets 13 of 17 unanswerable through
+#   0.48  refuses 0 of 24,              lets 12 of 17 through
+#   0.60  refuses 7 of 24,              lets  7 of 17 through
+#   0.74  refuses 20 of 24,             lets  0 of 17 through
+#
+# Set at 0.45, below the lowest real answer observed, for two reasons.
+#
+# First, the errors are not symmetrical in this design. An unanswerable question
+# that gets past the gate meets a second line of defence - the prompt's
+# abstention rule, which reads the chunks and can see the fact is absent. A real
+# answer wrongly refused meets nothing; the user is simply told the documents do
+# not cover something they do. Only one of the two errors is recoverable.
+#
+# Second, 24 questions is a small sample and 0.496 is its floor, not the
+# population's. A threshold pressed against the lowest observed value would
+# refuse legitimate questions that happen to fall below it. This leaves 0.046 of
+# margin at the cost of one extra unanswerable question reaching the prompt.
+#
+# Raising it is the right response to off-topic questions being answered. It is
+# the wrong response to on-topic questions with absent answers, which no
+# threshold separates - those are the prompt's to refuse.
+GATE_THRESHOLD = 0.45
+
 # Two chunks are the same passage twice when one literally repeats a run of the
 # other's words - which is exactly what the overlap window produces, since it
 # copies whole sentences from one chunk into the next.
