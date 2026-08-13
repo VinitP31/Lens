@@ -5,9 +5,10 @@ which is where the failures that matter actually live: a change to `Element`'s
 shape, or to what `Chunk` carries, can break ingestion while every unit test
 stays green.
 
-The path is validate (by hash) -> extract -> chunk -> store -> mark ready. The
-embedding step is stood in for by a deterministic fake, because the embedding
-model is not under test here and the suite must run offline.
+The path is validate (by hash) -> extract -> chunk -> embed -> store -> mark
+ready. Every stage is the real module. Only the network inside the embedder is
+replaced, by a deterministic stand-in, so the suite stays free and offline while
+still exercising the embedder's batching, ordering and validation.
 """
 
 import hashlib
@@ -16,24 +17,29 @@ import random
 import pytest
 
 from backend.errors import DuplicateDocumentError
-from backend.ingestion import chunker, extractor
+from backend.ingestion import chunker, embedder, extractor
 from backend.storage import registry, vector_store
 from config import settings
 from tests.conftest import PAGE_MARKERS
 
 
-def fake_vectors(chunks) -> list[list[float]]:
-    """Stands in for the embedder, which is the next piece to be built.
+def fake_embed(texts):
+    """Stands in for the embedding provider, so the suite stays free and offline.
 
-    Seeded from the chunk's own text, so the same text always produces the same
-    vector. That makes reingest genuinely comparable rather than randomly
-    different every run.
+    Seeded from each text, so the same text always gives the same vector. That
+    makes a reingest genuinely comparable instead of randomly different, which is
+    what the duplicate-detection tests depend on.
     """
     vectors = []
-    for chunk in chunks:
-        rng = random.Random(chunk.text)
+    for text in texts:
+        rng = random.Random(text)
         vectors.append([rng.uniform(-1.0, 1.0) for _ in range(settings.EMBEDDING_DIMENSIONS)])
     return vectors
+
+
+def vectors_for(chunks):
+    """Through the real embedder, with only the network replaced."""
+    return embedder.embed_chunks(chunks, embed=fake_embed)
 
 
 @pytest.fixture
@@ -52,6 +58,7 @@ def ingest(db, store, pdf):
     Deliberately written out rather than hidden behind a helper in the codebase:
     the pipeline module does not exist yet, and this is the shape it has to have.
     """
+
     digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
 
     existing = registry.find_by_hash(db, digest)
@@ -70,7 +77,7 @@ def ingest(db, store, pdf):
     chunks = chunker.chunk(extracted, title=document.display_name)
 
     registry.set_status(db, document.doc_id, registry.STATUS_INDEXING)
-    written = vector_store.upsert(store, document.doc_id, chunks, fake_vectors(chunks))
+    written = vector_store.upsert(store, document.doc_id, chunks, vectors_for(chunks))
 
     ready = registry.mark_ready(
         db,
@@ -179,7 +186,7 @@ def test_a_searched_chunk_still_knows_its_page_and_boxes(stores, simple_pdf):
     db, store = stores
     document, chunks = ingest(db, store, simple_pdf)
 
-    hits = vector_store.search(store, fake_vectors(chunks)[0], doc_ids=[document.doc_id], limit=1)
+    hits = vector_store.search(store, vectors_for(chunks)[0], doc_ids=[document.doc_id], limit=1)
 
     assert hits
     assert 1 <= hits[0].page <= 3
