@@ -22,7 +22,7 @@ from pathlib import Path
 from pymilvus import DataType, MilvusClient
 
 from backend.errors import EmbedModelMismatchError
-from backend.ingestion.chunker import Chunk
+from backend.ingestion.chunk import Chunk
 from config import settings
 
 
@@ -92,6 +92,12 @@ def connect(path: Path | str | None = None) -> MilvusClient:
             schema=_build_schema(client),
             index_params=index_params,
         )
+    else:
+        # An existing collection comes back released, and a released collection
+        # refuses every search. A freshly created one is loaded already, so this
+        # only bites on the second run of the process - which is every real run
+        # after the first, and none of the ones a single test process sees.
+        client.load_collection(settings.MILVUS_COLLECTION)
     return client
 
 

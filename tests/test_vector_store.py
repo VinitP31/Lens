@@ -12,7 +12,7 @@ and hand-written vectors make the expected ranking obvious by eye.
 import pytest
 
 from backend.errors import EmbedModelMismatchError
-from backend.ingestion.chunker import Chunk
+from backend.ingestion.chunk import Chunk
 from backend.storage import vector_store
 from config import settings
 
@@ -116,6 +116,29 @@ def test_chunks_survive_reopening_the_store(tmp_path):
 
     assert total == 1
     assert hits[0].text == "carried over"
+
+
+def test_a_released_collection_is_loaded_again_on_connect(tmp_path):
+    """A real restart, not just a second handle in the same process.
+
+    Milvus hands back an existing collection in a released state, and a released
+    collection refuses every search. The plain reopen test above passes while this
+    is broken, because a collection created in this process is still loaded - so
+    the fault only appears on the second run of the application, which is every
+    run after the first.
+    """
+    path = tmp_path / "chunks.db"
+    first = vector_store.connect(path)
+    vector_store.upsert(first, "doc1", [chunk(0, text="survives a restart")], [vector(1.0)])
+    # What a new process finds waiting for it.
+    first.release_collection(settings.MILVUS_COLLECTION)
+    first.close()
+
+    second = vector_store.connect(path)
+    hits = vector_store.search(second, vector(1.0))
+    second.close()
+
+    assert [hit.text for hit in hits] == ["survives a restart"]
 
 
 def test_connecting_to_an_existing_store_does_not_wipe_it(tmp_path):
