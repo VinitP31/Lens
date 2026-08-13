@@ -14,7 +14,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from backend.errors import DocumentNotFoundError, DuplicateDocumentError
+from backend.errors import (
+    DocumentNotFoundError,
+    DuplicateDocumentError,
+    EmbedModelMismatchError,
+)
 from config import settings
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
@@ -331,6 +335,37 @@ def discard(connection: sqlite3.Connection, doc_id: str) -> None:
     """
     connection.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
     connection.commit()
+
+
+def embed_models_in_use(connection: sqlite3.Connection) -> set[str]:
+    """Every embedding model the live library's vectors were produced with.
+
+    Normally one. More than one means the configuration changed while documents
+    were already indexed.
+    """
+    rows = connection.execute(
+        "SELECT DISTINCT embed_model FROM documents "
+        "WHERE embed_model IS NOT NULL AND deleted_at IS NULL"
+    ).fetchall()
+    return {row["embed_model"] for row in rows}
+
+
+def assert_embed_model(connection: sqlite3.Connection) -> None:
+    """Refuse to start if the library was built with a different embedding model.
+
+    This is the loudest failure in Lens by design. Vectors from two models
+    occupy unrelated spaces, so comparing them produces confident nonsense while
+    every component reports success - no exception, no warning, nothing in a log
+    to notice. An empty library is always fine: there is nothing to disagree
+    with yet.
+    """
+    in_use = embed_models_in_use(connection)
+    foreign = in_use - {settings.EMBEDDING_MODEL}
+    if foreign:
+        raise EmbedModelMismatchError(
+            f"library was indexed with {sorted(foreign)}, configured model is "
+            f"{settings.EMBEDDING_MODEL!r}. Re-index before starting."
+        )
 
 
 def unfinished(connection: sqlite3.Connection) -> list[Document]:
