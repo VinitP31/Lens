@@ -14,9 +14,10 @@ PDF chunks the same way with no code change.
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 
+from backend.ingestion.chunk import Chunk
 from backend.ingestion.extractor import TYPE_TEXT, Element, ExtractedDocument
 from config import settings
 
@@ -30,39 +31,6 @@ TokenCounter = Callable[[str], int]
 PARAGRAPH_BREAK = re.compile(r"\n\s*\n|\n")
 SENTENCE_BREAK = re.compile(r"(?<=[.!?:;])\s+")
 WORD_BREAK = re.compile(r"\s+")
-
-
-@dataclass(frozen=True)
-class Chunk:
-    """One unit of retrieval.
-
-    `text` is the body alone, because that is what a user is shown when they
-    open the source of an answer, and a header they did not write would read as
-    if the document contained it.
-
-    `embed_text` is what actually gets embedded: the context header followed by
-    the body. The header is cheap and does real work, because a question asked
-    in a heading's words then matches a chunk whose body uses different words.
-    """
-
-    index: int
-    text: str
-    page: int
-    section_path: str
-    element_type: str
-    token_count: int
-    # Boxes for the highlight. All of them are on `page`, because a chunk never
-    # holds text from more than one page: a citation resolves to one page and one
-    # set of coordinates on it, so text from the next page filed under this
-    # chunk would open a page that text is not on.
-    bboxes: list[tuple[float, float, float, float]] = field(default_factory=list)
-    # Set once the document has a name. Held on the chunk rather than rebuilt
-    # later so that what was embedded is exactly what is stored.
-    context_header: str = ""
-
-    @property
-    def embed_text(self) -> str:
-        return f"{self.context_header}\n{self.text}" if self.context_header else self.text
 
 
 @lru_cache(maxsize=1)

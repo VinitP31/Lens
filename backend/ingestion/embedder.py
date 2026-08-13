@@ -24,7 +24,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 
 from backend.errors import EmbeddingFailedError, MissingApiKeyError
-from backend.ingestion.chunker import Chunk
+from backend.ingestion.chunk import Chunk
 from config import settings
 
 # Takes a batch of texts, returns one vector per text, in the same order.

@@ -9,7 +9,7 @@ import pytest
 
 from backend.errors import EmbeddingFailedError, MissingApiKeyError
 from backend.ingestion import embedder
-from backend.ingestion.chunker import Chunk
+from backend.ingestion.chunk import Chunk
 from config import settings
 
 
