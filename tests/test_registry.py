@@ -7,8 +7,13 @@ survives the process and that a unique index is actually enforced on disk.
 
 import pytest
 
-from backend.errors import DocumentNotFoundError, DuplicateDocumentError
+from backend.errors import (
+    DocumentNotFoundError,
+    DuplicateDocumentError,
+    EmbedModelMismatchError,
+)
 from backend.storage import registry
+from config import settings
 
 
 @pytest.fixture
@@ -271,6 +276,55 @@ def test_a_deleted_document_is_not_treated_as_interrupted(db):
     registry.soft_delete(db, document.doc_id)
 
     assert registry.unfinished(db) == []
+
+
+# --- Embedding model guard -----------------------------------------------
+
+
+def test_an_empty_library_never_blocks_startup(db):
+    """Nothing indexed yet, so there is nothing to disagree with."""
+    registry.assert_embed_model(db)
+
+
+def test_a_library_built_with_the_configured_model_is_accepted(db):
+    document = add(db)
+    registry.mark_ready(db, document.doc_id, page_count=1, chunk_count=1)
+
+    registry.assert_embed_model(db)
+
+
+def test_a_library_built_with_another_model_refuses_to_start(db):
+    """The loudest failure in Lens by design. Vectors from two models occupy
+    unrelated spaces, so comparing them yields confident nonsense while every
+    component reports success."""
+    document = add(db)
+    registry.mark_ready(
+        db, document.doc_id, page_count=1, chunk_count=1, embed_model="text-embedding-ada-002"
+    )
+
+    with pytest.raises(EmbedModelMismatchError) as raised:
+        registry.assert_embed_model(db)
+
+    assert raised.value.code == "embed_model_mismatch"
+    assert "text-embedding-ada-002" in raised.value.detail
+
+
+def test_a_deleted_document_does_not_block_startup(db):
+    """Its vectors are gone from the searchable library, so its model is moot."""
+    document = add(db)
+    registry.mark_ready(
+        db, document.doc_id, page_count=1, chunk_count=1, embed_model="some-old-model"
+    )
+    registry.soft_delete(db, document.doc_id)
+
+    registry.assert_embed_model(db)
+
+
+def test_the_models_in_use_are_reported(db):
+    document = add(db)
+    registry.mark_ready(db, document.doc_id, page_count=1, chunk_count=1)
+
+    assert registry.embed_models_in_use(db) == {settings.EMBEDDING_MODEL}
 
 
 # --- Durability ----------------------------------------------------------
