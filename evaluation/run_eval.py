@@ -290,6 +290,19 @@ def _threshold_table(golden: list[float], out_of_scope: list[float]) -> None:
     print("  Out-of-scope questions that survive the gate are the prompt's abstention")
     print("  rule to catch, which is where LENS.md already assigns them.")
 
+    configured = settings.GATE_THRESHOLD
+    refused = sum(1 for score in golden if score < configured)
+    answered = sum(1 for score in out_of_scope if score >= configured)
+    print(f"\n{'-' * 74}")
+    print(f"THE CONFIGURED THRESHOLD: {configured}")
+    print(f"{'-' * 74}")
+    print(f"  real answers wrongly refused    {refused}/{len(golden)}")
+    print(f"  unanswerable questions stopped  {len(out_of_scope) - answered}/{len(out_of_scope)}")
+    print(f"  unanswerable questions passed   {answered}/{len(out_of_scope)}  -> the prompt's job")
+    if refused:
+        print("\n  WARNING: the gate is refusing questions the corpus answers.")
+        print("  Lower the threshold, or accept and record why.")
+
 
 def main() -> int:
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
