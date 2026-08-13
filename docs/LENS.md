@@ -717,14 +717,22 @@ The LLM now has text that looks relevant, a question it wants to help with, and 
 One comparison, before any LLM call:
 
 ```python
-similarity = 1 - results["distances"][0][0]   # Milvus returns distance
-if similarity < GATE_THRESHOLD:
+if hits[0].similarity < GATE_THRESHOLD:
     return abstention
 ```
 
 That's it. One `if`. Its value is in *where* it sits — before the LLM — so out-of-scope questions never reach generation. Free, deterministic, same result every time.
 
-⚠️ **The bug that will bite you.** Milvus returns **distance**, where lower is better. If you threshold the raw value with `>`, you build a system that answers confidently on out-of-scope questions and refuses on in-scope ones. It looks like a prompt problem and can eat two days. **Log both distance and similarity side by side from the first line of code.**
+⚠️ **The bug that will bite you, and the measurement that settles it.** The gate needs *higher means closer*, and Milvus reports its score in a field called `distance` whatever metric is configured. The name is only accurate for some of them:
+
+| Metric | What the `distance` field holds | Conversion |
+|---|---|---|
+| Cosine — what this project uses | The cosine **similarity**. Measured against a live collection: identical `+1.0`, unrelated `0.0`, opposite `-1.0` | None. Use it as it is |
+| L2, the common default | A true distance, where `0` is a perfect match | Turn the sign around |
+
+So `1 - distance` is right for a distance metric and **wrong here** — it would score an exact match `0.0` and an unrelated chunk `1.0`, producing a system that answers confidently on out-of-scope questions and refuses on in-scope ones. It looks like a prompt problem and can eat two days.
+
+The conversion therefore lives in exactly one function, `vector_store._similarity`, and `search` returns a `Hit` carrying `similarity` already the right way up alongside the untouched `raw_distance`. Nothing downstream ever reads a raw Milvus score, and both numbers are logged side by side.
 
 ### Picking the threshold
 
