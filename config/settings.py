@@ -19,6 +19,10 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 VECTOR_DIR = DATA_DIR / "vectors"
 PROFILE_DIR = DATA_DIR / "profiles"
 
+# Application state: the document registry, conversations and messages. One
+# local file, so a restart loses nothing and there is no server to run.
+DB_PATH = DATA_DIR / "lens.db"
+
 # --- Extraction ----------------------------------------------------------
 # Docling's standard PDF pipeline. AUTO picks the best available accelerator,
 # which is Apple MPS on this machine and CPU elsewhere.

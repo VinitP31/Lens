@@ -36,3 +36,26 @@ class EmptyDocumentError(LensError):
     """The PDF has no pages, or no extractable content on any page."""
 
     code = "empty_document"
+
+
+# --- Storage -------------------------------------------------------------
+
+
+class DuplicateDocumentError(LensError):
+    """A document with these exact bytes is already in the library.
+
+    Carries the existing document's id in `doc_id`, so the caller can point at
+    what is already there instead of reporting a bare failure.
+    """
+
+    code = "duplicate_document"
+
+    def __init__(self, detail: str = "", doc_id: str = "") -> None:
+        self.doc_id = doc_id
+        super().__init__(detail)
+
+
+class DocumentNotFoundError(LensError):
+    """No document with this id, or it has been deleted."""
+
+    code = "document_not_found"
