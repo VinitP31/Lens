@@ -203,6 +203,18 @@ EMBEDDING_DIMENSIONS = 1536
 # is worse than a table split at its row boundaries.
 EMBED_MAX_INPUT_TOKENS = 8191
 
+# Chunks sent per request. Batching is the difference between one call and one
+# call per chunk: a 144-chunk document becomes two requests instead of 144.
+# Kept well under the provider's per-request token budget so a document of large
+# table chunks cannot overflow one batch.
+EMBED_BATCH_SIZE = 64
+
+# Transient failures - a dropped connection, a rate limit - are retried. A
+# genuine error such as a bad key is not, because retrying it just delays the
+# same failure three times over.
+EMBED_MAX_RETRIES = 3
+EMBED_RETRY_BACKOFF_SECONDS = 2.0
+
 # --- Vector store --------------------------------------------------------
 # Milvus Lite: a local file, no server to run.
 

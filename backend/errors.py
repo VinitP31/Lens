@@ -38,6 +38,30 @@ class EmptyDocumentError(LensError):
     code = "empty_document"
 
 
+# --- Embedding -----------------------------------------------------------
+
+
+class EmbeddingFailedError(LensError):
+    """The embedding provider could not be reached, or returned something unusable.
+
+    Raised only after retries are exhausted, or immediately for a failure that
+    retrying cannot fix, such as a missing or rejected key.
+    """
+
+    code = "embedding_failed"
+
+
+class MissingApiKeyError(LensError):
+    """No API key in the environment.
+
+    Its own error because it is the one failure a user can fix themselves, and
+    the message needs to say which variable to set rather than surfacing a
+    provider's authentication error.
+    """
+
+    code = "missing_api_key"
+
+
 # --- Storage -------------------------------------------------------------
 
 

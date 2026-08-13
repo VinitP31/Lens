@@ -15,7 +15,7 @@ sse-starlette
 # Orchestration
 langchain
 langchain-openai
-openai
+openai==3.0.0
 
 # PDF processing — versions verified working on macOS / Python 3.12
 docling==2.119.0
