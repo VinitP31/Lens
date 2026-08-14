@@ -185,6 +185,7 @@ flowchart LR
     UI["Streamlit UI"] -->|HTTP| API["FastAPI backend"]
     API --> ING["Ingestion"]
     API --> QRY["Query"]
+    ING -->|"spawn"| W["Extraction worker<br/>Docling, own process"]
     ING --> V[("Milvus<br/>chunks + vectors")]
     QRY --> V
     ING --> DB[("SQLite<br/>documents, chats")]
@@ -195,7 +196,10 @@ flowchart LR
     style API fill:#e8f5e9,stroke:#66bb6a
     style ING fill:#fff8e1,stroke:#ffa726
     style QRY fill:#fff8e1,stroke:#ffa726
+    style W fill:#fff8e1,stroke:#ffa726
 ```
+
+Extraction sits in a process of its own, not for tidiness but because Docling and Milvus Lite cannot coexist in one — see [Why extraction runs in its own process](#why-extraction-runs-in-its-own-process).
 
 ### Why a separate backend instead of one Streamlit app
 
@@ -505,11 +509,11 @@ Index: HNSW, cosine. Cosine because embeddings are normalised, so only direction
 flowchart TB
     A["Upload PDF"] --> B{"Valid?"}
     B -->|"too big, encrypted,<br/>corrupt, duplicate"| R["Reject with reason<br/>nothing saved"]
-    B -->|yes| C["Extract text, tables,<br/>figures, coordinates"]
+    B -->|yes| C["Extract text, tables,<br/>figures, coordinates<br/><i>worker process</i>"]
     C --> D{"Enough text?"}
     D -->|no| E["Run OCR"]
     E --> F
-    D -->|yes| F["Chunk"]
+    D -->|yes| F["Chunk<br/><i>worker process</i>"]
     F --> G["Embed"]
     G --> H["Store in Milvus"]
     H --> I["Ready"]
@@ -546,8 +550,41 @@ Docling returns a tree in reading order. Every element has a type, its text, its
 | Figure captions | Kept as text with a figure marker. The figure itself is located but not read |
 | Headers and footers | Dropped using the `content_layer` flag |
 | Contents pages | Dropped where Docling labels them |
+| A short label beside or above a bare value | Rejoined into one element, `Fees: 30 pts` |
 
 Dropping headers and footers matters more than it looks. Something like *"Confidential — Page 12 of 84"* on every page would end up embedded in every chunk. That makes all chunks slightly more similar to each other, squeezes the range of similarity scores, and directly messes up the confidence gate threshold.
+
+### Labels and their values
+
+A document often states a fact as a short label and a bare value set apart from it — a weighting, a fee, a threshold. Layout analysis emits each as its own element, and once they are two elements nothing records that they belong together.
+
+Measured on the sample RFP, page 21 lists three scoring weights as a label above each value. Docling promoted the two longer labels to headings, so they left the body text entirely and survived only in the section path, and the third label stayed behind as loose text beside its number. The chunk body read `55 pts / Fees / 30 pts`, and the answer given was *"55 points for fees"* when fees are 30.
+
+That is the worst output this system can produce: **confidently wrong, with a valid citation**. Citation validation cannot catch it, because the citation is genuine — it is the passage that is mis-assembled. Nothing downstream catches it either.
+
+**How.** A bare value is rejoined to the label next to it. Both the wording and the geometry have to agree: the label is at most `LABEL_MAX_WORDS` words of plain text with no sentence punctuation, the value is a number with at most a short unit, and the two boxes sit directly above or beside one another within `LABEL_VALUE_MAX_GAP_POINTS`. Either signal alone would be wrong — wording alone joins a heading to the first number anywhere beneath it, geometry alone joins any two things that happen to sit close together.
+
+Merging two elements that were never a pair states a fact the document does not, so the rule is deliberately strict. Across the six sample documents it changed exactly one element out of 1676.
+
+**What is deliberately not covered.** A wide two-column grid, with the label at the left margin and its value near the right. At that distance anything on the same line qualifies, including two unrelated cells of a three-column row. The boundary is asserted by a test so it is not mistaken for a defect.
+
+The second half of this fix lives in the prompt: passages are numbered with their section path, so a label Docling promoted to a heading still reaches the model. Both halves are needed — the pairing rule alone would have left two of the three weights unattributed.
+
+### Why extraction runs in its own process
+
+Docling bundles a copy of the OpenMP runtime, inside PyTorch. Milvus Lite bundles a second copy, inside FAISS. That runtime refuses to initialise twice in one process, and a process that does it dies outright — `OMP: Error #15` and an abort, or a bare segmentation fault, with no Python traceback.
+
+It only happens once the vector index has actually been loaded. So an **empty library ingests happily, and a library with documents already in it does not** — which is to say the failure is invisible on a first run and certain on every run after it. Adding a second document is the ordinary case.
+
+**How.** Extraction and chunking run in a spawned worker process, and Docling is imported only there. The parent keeps the vector store and receives `Prepared` — chunks plus the counts the registry records — built entirely from plain types so neither side has to import the other's libraries. Chunking runs in the worker too, because it needs the extracted elements and returning those would defeat the purpose.
+
+`spawn` rather than `fork`: a forked child inherits the parent's loaded libraries, including the vector index, which is precisely the pairing that cannot coexist.
+
+**Rejected.** The documented environment variable that suppresses the abort — its own documentation says it may silently produce incorrect results, which is worse than a crash, because a crash is visible. Also rejected: making the two copies into one by hand, a per-machine change that would not survive a fresh install by anyone else and would break the README cold-start test.
+
+**Costs.** The worker reloads the Docling models per document, measured at roughly 40s against 18s in-process on the sample manual. Paid once per upload, in the background, and it buys per-document isolation: a worker that hangs or dies takes nothing else with it, and is stopped after `EXTRACT_TIMEOUT_SECONDS`.
+
+This makes the separation this document already asks for literal rather than aspirational. Ingestion is a batch job and the query path is interactive; now they cannot share an address space even by accident. The query path must therefore never import the extractor, which is asserted by a test that inspects a fresh interpreter — asserting it from inside the suite proves nothing, since another test module has already imported it by then.
 
 ### Tables of contents
 
@@ -958,9 +995,11 @@ Lens/
 │   ├── ingestion/
 │   │   ├── pipeline.py            Stage orchestration, status, rollback
 │   │   ├── validator.py           Hash, size, pages, encryption, duplicate
-│   │   ├── extractor.py           Docling, with provenance
+│   │   ├── prepare.py             Runs extraction + chunking in a worker process
+│   │   ├── extractor.py           Docling, with provenance. Worker process only
 │   │   ├── ocr.py                 Conditional OCR and density check
 │   │   ├── chunker.py             Structure chunking, context headers
+│   │   ├── chunk.py               The Chunk type, free of Docling imports
 │   │   └── embedder.py            Batched, retry-capped
 │   │
 │   ├── retrieval/
@@ -1052,6 +1091,16 @@ Everything below lives in `settings.py`.
 | `MIN_CHARS_PER_PAGE` | 150 | Below this after OCR, the PDF is unreadable |
 | `OCR_TRIGGER_CHARS_PER_PAGE` | 150 | Averaged over the document, never per page |
 
+### Extraction
+
+| Setting | Value | Why |
+|---|---|---|
+| `LABEL_MAX_WORDS` | 4 | Longer than this is a sentence, and a sentence followed by a number is not a label and a value |
+| `LABEL_VALUE_MAX_GAP_POINTS` | 20.0 | About one line of text. Further apart and the two are separate items on the page |
+| `EXTRACT_TIMEOUT_SECONDS` | 600.0 | Catches a hung worker. Generous against 50 pages at roughly 3s each |
+| `EXTRACT_POLL_SECONDS` | 0.5 | How often the parent checks the worker. Short enough to notice a death, long enough not to spin |
+| `EXTRACT_SHUTDOWN_SECONDS` | 10.0 | Grace before a stopped worker is killed outright |
+
 ### Chunking
 
 | Setting | Value |
@@ -1067,7 +1116,7 @@ Everything below lives in `settings.py`.
 |---|---|---|
 | `RETRIEVE_CANDIDATES` | 12 | Over-fetch so dedupe doesn't starve the final set |
 | `CONTEXT_CHUNKS` | 5 | Passed to the LLM |
-| `GATE_THRESHOLD` | **To be measured** | Must never ship as a guess |
+| `GATE_THRESHOLD` | 0.45, measured at Stage 4 | Never a guess. Chosen inside the overlap between the two question sets: loses 0 of 24 real answers and stops 4 of 17 unanswerable ones |
 | `MAX_PER_DOCUMENT` | Off | Turn on only if measurement shows crowding |
 | `TEMPERATURE` | 0.0 | Consistency |
 | `CONDENSE_CHAR_THRESHOLD` | 1500 | Above this, condense before embedding |
@@ -1108,6 +1157,8 @@ Three rules: every failure has a defined outcome, every message says what went w
 | Empty PDF | Rejected as empty |
 | Duplicate hash | Reported as already present, naming the existing document. No reindex |
 | Same filename, different content | Both indexed, counter suffix on display name |
+| Extraction worker dies | Reported as an extraction failure carrying the worker's exit code, then rolled back and discarded. Never reported as a corrupt file, which it is not |
+| Extraction worker hangs | Stopped after `EXTRACT_TIMEOUT_SECONDS`, killed if it ignores that, then rolled back and discarded |
 | Embedding API error | Retry up to 3, then roll back and discard |
 | Milvus write error | Roll back and discard |
 | Process killed mid-ingest | On next startup, non-terminal documents are cleaned up and discarded |
@@ -1318,6 +1369,8 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | A table beyond the embedding input limit is split | The model accepts 8191 tokens, and a chunk above that cannot be indexed at all | A very large table is cited as more than one chunk. Header rows are repeated into each part, so no part loses its column names | Cross-page and cross-chunk table stitching at retrieval time |
 | No overlap across a section boundary | Overlap is carried inside a section only, because a chunk spanning two sections could not name one section in its citation | An answer straddling two sections is whole in neither chunk | Carry a tail across the boundary and accept the weaker citation |
 | The gate cannot catch an on-topic question whose answer is absent | Similarity measures whether a passage is about the topic, not whether it holds the fact | Measured on this corpus: 12 of 17 unanswerable questions score above a threshold that loses no real answers | None at the gate. Caught by the prompt's abstention rule, whose refusal rate is measured on the out-of-scope set |
+| A wide label-value grid keeps its pairing unstated | Rejoining a label to its value requires the two to sit within `LABEL_VALUE_MAX_GAP_POINTS`. At the width of a full page column, anything on the same line would qualify | The label and the value stay as separate chunks. The section path usually still carries the label, so the pairing is degraded rather than lost | Detect a genuine grid by column alignment across several rows, then pair within it |
+| Extraction is slower than it needs to be | Each document gets a fresh worker process, so the Docling models load again every time | Roughly 40s against 18s in-process, on the sample manual. Paid in the background per upload | A worker kept alive across a batch, at the cost of losing per-document isolation |
 | Short subsections become short chunks | Structure-first honours the document's own granularity, and a one-paragraph subsection is one chunk | Many small chunks compete against larger ones for a retrieval slot. On one sample manual, 31 of 53 prose chunks were under the 120-token minimum | Merge sibling subsections under a shared parent, only if measurement shows a cost |
 
 ---
@@ -1334,6 +1387,8 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | Reindex a failed document | Recovery without re-uploading |
 | Show answer confidence | Surfaces the margin above the threshold |
 | Sibling-subsection merging | Short chunks competing for retrieval slots, if Stage 3 shows a cost |
+| Grid detection by column alignment | Wide label-value grids, whose pairing the proximity rule deliberately leaves alone |
+| A worker reused across a batch | Reloading the Docling models once per document |
 | Overlap across section boundaries | Answers that straddle two sections |
 
 ### Later
@@ -1444,6 +1499,12 @@ Lets the test suite run offline in a second at zero cost. Without it, tests hit 
 **D-26 · Fail at startup instead of degrading.**
 Unreachable Milvus, missing keys, and embedding mismatch all block startup. A backend that starts and then gives subtly wrong answers is worse than one that refuses and says why — silent wrongness is exactly what this product exists to prevent. *Rejected:* starting with warnings. *Costs:* a stricter startup path.
 
+**D-27 · Extraction runs in a worker process.**
+Docling and Milvus Lite each bundle a copy of the OpenMP runtime, which refuses to initialise twice in one process and aborts when it does. It only triggers once the vector index is loaded, so an empty library ingests and a non-empty one crashes — invisible on the first run, certain afterwards. Docling is therefore imported only in a spawned worker, which returns plain-typed chunks. *Rejected:* the environment variable that suppresses the abort, whose own documentation says it may silently produce incorrect results — worse than a crash, because a crash is visible; and deduplicating the two library copies by hand, which no fresh install would reproduce. *Costs:* the models reload per document, roughly 40s against 18s. *Buys:* per-document isolation, and the ingestion/query separation becomes structural rather than a convention.
+
+**D-28 · A bare value is rejoined to its label.**
+A label and a bare value set apart on the page arrive as two elements, and the pairing is then unrecorded. Measured on the sample RFP this produced a confidently wrong answer carrying a valid citation — the failure mode with no downstream defence, since the citation is genuine and only the passage is mis-assembled. Both wording and geometry must agree before two elements are joined. *Rejected:* joining on wording alone, which attaches a heading to the first number beneath it, and on geometry alone, which joins whatever sits close together; also rejected, pairing across a full-width column gap, where any two cells on a line would qualify. *Costs:* wide grids keep their pairing unstated, degraded to whatever the section path carries.
+
 ---
 
 ## 23. Build order
@@ -1501,7 +1562,7 @@ At this point the system works. Everything before is foundation, everything afte
 
 ### Stage 6 · Backend
 
-HTTP routes, background ingestion with per-stage status, typed errors, rollback, startup checks, query traces.
+HTTP routes, background ingestion with per-stage status, typed errors, rollback, startup checks, query traces. The background task spawns the extraction worker rather than extracting in-process — the API process holds the Milvus connection, which is the arrangement that cannot also hold Docling.
 
 ### Stage 7 · UI
 
