@@ -1,7 +1,8 @@
 """Measure retrieval against the question sets, and print the metrics table.
 
     python evaluation/run_eval.py --ingest      build the index, then measure
-    python evaluation/run_eval.py               measure against an existing index
+    python evaluation/run_eval.py               measure retrieval and the gate
+    python evaluation/run_eval.py --answers     also generate, and measure abstention
 
 Retrieval is measured before generation exists, on purpose. If retrieval misses,
 no prompt can recover the answer, so a generation metric would only tell you the
@@ -31,13 +32,36 @@ from dotenv import load_dotenv  # noqa: E402
 
 from backend.errors import DuplicateDocumentError  # noqa: E402
 from backend.ingestion import embedder, prepare  # noqa: E402
-from backend.retrieval import retriever  # noqa: E402
+from backend.retrieval import gate, generator, retriever  # noqa: E402
 from backend.storage import registry, vector_store  # noqa: E402
 from config import settings  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent
+# Refusals that came from the numeric gate rather than from the model reading the
+# passages. Kept apart in the report: the two layers fail for different reasons
+# and are fixed in different places.
+GATE_REASONS = frozenset(
+    {gate.REASON_NO_DOCUMENTS, gate.REASON_NO_MATCHES, gate.REASON_BELOW_THRESHOLD}
+)
 GOLDEN_SET = EVAL_DIR / "golden_set.csv"
 OUT_OF_SCOPE = EVAL_DIR / "out_of_scope.csv"
+
+
+@dataclass
+class Answered:
+    """One generated answer, judged only on what can be judged mechanically.
+
+    Nothing here scores wording. Whether the answer reads well is not measurable
+    and not the claim being made; whether it abstained, and whether its citations
+    point at the page the fact actually lives on, are both exact.
+    """
+
+    question: str
+    abstained: bool
+    reason: str | None
+    cited_expected_page: bool
+    fabricated: list[int]
+    citation_count: int
 
 
 @dataclass
@@ -169,6 +193,166 @@ def measure_out_of_scope(db, store) -> list[tuple[str, float | None]]:
             retrieved = retriever.retrieve(db, store, row["question"])
             scores.append((row["question"], retrieved.top_similarity))
     return scores
+
+
+def _names(db) -> dict[str, str]:
+    """Document id to display name, the mapping generation resolves citations with."""
+    return {document.doc_id: document.display_name for document in registry.list_documents(db)}
+
+
+def answer_golden(db, store) -> list[Answered]:
+    """Generate an answer for every answerable question.
+
+    Citation accuracy is the one thing checked beyond abstention: did any
+    validated citation land on the document and page where the golden set says
+    the fact lives. A right answer citing the wrong page is the failure this
+    system is built to prevent, and it is invisible unless measured.
+    """
+    names = _names(db)
+    by_name = _document_ids_by_name(db)
+    answers: list[Answered] = []
+
+    with GOLDEN_SET.open() as handle:
+        for row in csv.DictReader(handle):
+            expected_id = by_name.get(row["expected_doc"])
+            expected_page = int(row["expected_page"])
+            retrieved = retriever.retrieve(db, store, row["question"])
+            decision = gate.evaluate(retrieved)
+
+            if not decision.passed:
+                # Refused before any model call. Counted as an abstention with the
+                # gate's own reason, so the two layers stay distinguishable.
+                answers.append(
+                    Answered(
+                        question=row["question"],
+                        abstained=True,
+                        reason=decision.reason,
+                        cited_expected_page=False,
+                        fabricated=[],
+                        citation_count=0,
+                    )
+                )
+                continue
+
+            result = generator.generate(row["question"], retrieved.hits, names)
+            answers.append(
+                Answered(
+                    question=row["question"],
+                    abstained=result.abstained,
+                    reason=result.reason,
+                    cited_expected_page=any(
+                        citation.doc_id == expected_id and citation.page == expected_page
+                        for citation in result.citations
+                    ),
+                    fabricated=result.fabricated,
+                    citation_count=len(result.citations),
+                )
+            )
+    return answers
+
+
+def answer_out_of_scope(db, store) -> list[Answered]:
+    """Put every unanswerable question through the whole pipeline.
+
+    This is the measurement the build order refuses to treat as optional.
+    Calibration showed the gate cannot stop an on-topic question whose answer is
+    absent, so the prompt's abstention rule is the only thing between those
+    questions and a confident, well-cited, invented answer. Assuming it works
+    would leave half the system's correctness unmeasured.
+    """
+    names = _names(db)
+    answers: list[Answered] = []
+
+    with OUT_OF_SCOPE.open() as handle:
+        for row in csv.DictReader(handle):
+            retrieved = retriever.retrieve(db, store, row["question"])
+            decision = gate.evaluate(retrieved)
+
+            if not decision.passed:
+                answers.append(
+                    Answered(
+                        question=row["question"],
+                        abstained=True,
+                        reason=decision.reason,
+                        cited_expected_page=False,
+                        fabricated=[],
+                        citation_count=0,
+                    )
+                )
+                continue
+
+            result = generator.generate(row["question"], retrieved.hits, names)
+            answers.append(
+                Answered(
+                    question=row["question"],
+                    abstained=result.abstained,
+                    reason=result.reason,
+                    cited_expected_page=False,
+                    fabricated=result.fabricated,
+                    citation_count=len(result.citations),
+                )
+            )
+    return answers
+
+
+def _rule(title: str) -> None:
+    print("\n" + "-" * 74)
+    print(title)
+    print("-" * 74)
+
+
+def report_answers(golden: list[Answered], out_of_scope: list[Answered]) -> bool:
+    """The generation metrics table. Returns whether the stage gate is met."""
+    print("\n" + "=" * 74)
+    print("GENERATION")
+    print("=" * 74)
+
+    answered = [a for a in golden if not a.abstained]
+    cited_right = [a for a in answered if a.cited_expected_page]
+    refused_by_gate = [a for a in golden if a.abstained and a.reason in GATE_REASONS]
+    refused_by_prompt = [a for a in golden if a.abstained and a.reason not in GATE_REASONS]
+
+    print(f"  answerable questions            {len(golden)}")
+    print(f"    answered                      {len(answered)}/{len(golden)}")
+    print(f"    citation on the expected page {len(cited_right)}/{len(answered)}")
+    print(f"    wrongly refused by the gate   {len(refused_by_gate)}/{len(golden)}")
+    print(f"    wrongly refused by the model  {len(refused_by_prompt)}/{len(golden)}")
+
+    _rule("ABSTENTION ON THE OUT-OF-SCOPE SET, the number Stage 5 requires")
+    reached = [a for a in out_of_scope if a.reason not in GATE_REASONS or not a.abstained]
+    stopped_by_gate = [a for a in out_of_scope if a.abstained and a.reason in GATE_REASONS]
+    refused = [a for a in out_of_scope if a.abstained]
+    invented = [a for a in out_of_scope if not a.abstained]
+
+    print(f"  unanswerable questions          {len(out_of_scope)}")
+    print(f"    stopped by the gate           {len(stopped_by_gate)}   (no model call)")
+    print(f"    reached the model             {len(reached)}")
+    print(f"    refused by the model          {len(reached) - len(invented)}/{len(reached)}")
+    print(f"    ANSWERED anyway               {len(invented)}/{len(reached)}")
+    print(f"  refused overall                 {len(refused)}/{len(out_of_scope)}")
+
+    for a in invented:
+        print(f"      invented: {a.question[:60]}")
+
+    fabricated = [a for a in golden + out_of_scope if a.fabricated]
+    _rule("CITATION VALIDATION")
+    print(f"  answers citing a passage that was never supplied  {len(fabricated)}")
+    for a in fabricated:
+        print(f"      {a.fabricated}  {a.question[:56]}")
+
+    # The gate for this stage: no answerable question lost, every citation
+    # resolvable, and nothing invented on a question the corpus cannot answer.
+    clean = not invented and not fabricated and not refused_by_gate
+    _rule("STAGE 5 GATE")
+    print(f"  {'MET' if clean else 'NOT MET'}")
+    if not clean:
+        if invented:
+            print(f"    {len(invented)} unanswerable question(s) answered anyway")
+        if fabricated:
+            print(f"    {len(fabricated)} answer(s) cited an unsupplied passage")
+        if refused_by_gate:
+            print(f"    {len(refused_by_gate)} answerable question(s) refused by the gate")
+    return clean
 
 
 def report(results: list[Result], out_of_scope: list[tuple[str, float | None]]) -> bool:
@@ -310,6 +494,11 @@ def main() -> int:
     parser.add_argument("--samples", type=Path, default=Path("samples"))
     parser.add_argument("--db", type=Path, default=None, help="registry path")
     parser.add_argument("--store", type=Path, default=None, help="vector store path")
+    parser.add_argument(
+        "--answers",
+        action="store_true",
+        help="also generate answers and measure abstention (costs model calls)",
+    )
     args = parser.parse_args()
 
     db = registry.connect(args.db)
@@ -330,6 +519,12 @@ def main() -> int:
     results = measure_golden(db, store)
     out_of_scope = measure_out_of_scope(db, store)
     clean = report(results, out_of_scope)
+
+    if args.answers:
+        # Left behind a flag on purpose. Retrieval and the gate are free to
+        # measure and are re-run constantly; generation costs a model call per
+        # question and is measured when something that could change it changed.
+        clean = report_answers(answer_golden(db, store), answer_out_of_scope(db, store)) and clean
 
     db.close()
     store.close()
