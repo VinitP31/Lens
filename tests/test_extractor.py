@@ -556,3 +556,135 @@ def test_cleaning_keeps_line_breaks_but_collapses_spaces():
     cleaned = extractor._clean("| Role   |  Limit |\n|  Staff |  90    |")
     assert "\n" in cleaned
     assert "  " not in cleaned
+
+
+# --- label and value pairing ---------------------------------------------
+# A fact stated as a short label above or beside a bare value arrives as two
+# elements. Left apart, several such facts read as a list of unattached words
+# and numbers, and an answer can pair the wrong number with the wrong label.
+
+
+def _line(text: str, left: float, top: float, width: float = 40.0, page: int = 1) -> object:
+    return extractor.Element(
+        text=text,
+        page=page,
+        element_type=extractor.TYPE_TEXT,
+        section_path="Evaluation",
+        bboxes=[(left, top, left + width, top + 12.0)],
+    )
+
+
+def test_a_value_below_its_label_is_joined():
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 210.6), _line("30 pts", 292.8, 227.8)]
+    )
+
+    assert len(joined) == 1
+    assert joined[0].text == "Fees: 30 pts"
+
+
+def test_a_value_beside_its_label_is_joined():
+    joined = extractor._with_paired_values(
+        [_line("Total weight", 72.0, 300.0), _line("18 kg", 120.0, 300.0)]
+    )
+
+    assert [element.text for element in joined] == ["Total weight: 18 kg"]
+
+
+def test_columns_a_page_apart_are_not_joined():
+    """The boundary of this rule, stated so it is not mistaken for a bug.
+
+    A wide two-column grid - label at the left margin, value near the right -
+    is left alone. Anything on the same line would qualify at that distance,
+    including two unrelated cells of a three-column row, and inventing a pairing
+    is worse than leaving one unstated.
+    """
+    joined = extractor._with_paired_values(
+        [_line("Fees", 72.0, 300.0), _line("30 pts", 400.0, 300.0)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_the_joined_element_keeps_both_boxes():
+    """The citation highlights the whole fact, not half of it."""
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 210.6), _line("30 pts", 292.8, 227.8)]
+    )
+
+    assert len(joined[0].bboxes) == 2
+
+
+def test_a_label_keeps_its_own_section_path():
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 210.6), _line("30 pts", 292.8, 227.8)]
+    )
+
+    assert joined[0].section_path == "Evaluation"
+
+
+def test_two_values_in_a_row_are_not_joined():
+    """A column of numbers under one heading is not a label and a value. Joining
+    them would state a pairing the document does not make."""
+    joined = extractor._with_paired_values(
+        [_line("55 pts", 292.8, 176.5), _line("30 pts", 292.8, 194.0)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_sentence_is_not_treated_as_a_label():
+    """Otherwise any paragraph would swallow the first number beneath it."""
+    joined = extractor._with_paired_values(
+        [
+            _line("Proposals will be scored on the following weights", 125.5, 75.9, width=370.0),
+            _line("15 pts", 292.8, 92.0),
+        ]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_value_carrying_words_is_not_a_bare_value():
+    """ "30 pts payable in advance" states the pairing itself and needs no help."""
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 210.6), _line("30 pts payable in advance", 292.8, 227.8, width=120.0)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_label_and_a_value_far_apart_are_not_joined():
+    """Two items at opposite ends of a page are not a pair, however they read."""
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 90.0), _line("30 pts", 292.8, 640.0)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_diagonal_pair_is_not_joined():
+    """Neither above nor beside: the boxes share no span, so nothing lines up."""
+    joined = extractor._with_paired_values(
+        [_line("Fees", 72.0, 200.0), _line("30 pts", 400.0, 215.0)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_pair_split_across_a_page_break_is_not_joined():
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 700.0), _line("30 pts", 292.8, 72.0, page=2)]
+    )
+
+    assert len(joined) == 2
+
+
+def test_a_label_is_used_once():
+    """Consuming both elements stops the value being paired again with the next
+    label, which would repeat it in two places."""
+    joined = extractor._with_paired_values(
+        [_line("Fees", 297.6, 210.6), _line("30 pts", 292.8, 227.8), _line("Bond", 297.6, 245.0)]
+    )
+
+    assert [element.text for element in joined] == ["Fees: 30 pts", "Bond"]
