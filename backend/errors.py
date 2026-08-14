@@ -100,3 +100,15 @@ class VectorStoreError(LensError):
     """The vector store could not be opened or written."""
 
     code = "vector_store_error"
+
+
+class GenerationFailedError(LensError):
+    """The answer model could not be reached, or returned nothing usable.
+
+    Distinct from an abstention. An abstention is a correct outcome the system
+    reports calmly; this is a failure, and telling a user the documents do not
+    cover their question when the truth is that the provider was down would be a
+    lie in the one place this system exists not to tell one.
+    """
+
+    code = "generation_failed"
