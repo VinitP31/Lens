@@ -376,6 +376,44 @@ OCR_TRIGGER_CHARS_PER_PAGE = 150
 # rejected rather than indexed as near-empty chunks.
 MIN_CHARS_PER_PAGE = 150
 
+# --- Generation ----------------------------------------------------------
+# The gate has already decided the question is worth answering by the time any
+# of this is used. What is left is to answer only from the passages given, cite
+# them by number, and say so when they do not hold the answer.
+
+MODEL_ANSWER = "gpt-4o-mini"
+
+# Retrieval is fully deterministic, so the same question retrieves the same
+# passages every time. Zero makes generation as close to deterministic as hosted
+# inference allows: the honest claim is the same substance and the same
+# citations, not the same bytes.
+TEMPERATURE = 0.0
+
+# Enough for a thorough answer over five passages. A cap exists so a runaway
+# generation cannot bill without limit.
+ANSWER_MAX_OUTPUT_TOKENS = 800
+
+ANSWER_MAX_RETRIES = 3
+ANSWER_RETRY_BACKOFF_SECONDS = 2.0
+
+# What the model must reply when the passages do not hold the answer.
+#
+# Deliberately not a sentence. Code has to recognise this reliably, and matching
+# on prose would mean a model that says "I could not find" rather than "I cannot
+# find" is read as a real answer. Upper case with an underscore is something the
+# model will not produce by accident in the middle of a genuine answer.
+#
+# This is the second of the two refusal layers. The gate stops questions the
+# corpus has nothing on; measurement at Stage 4 showed it cannot stop an
+# on-topic question whose answer is simply absent, and this is what catches
+# those. Its rate is measured, not assumed.
+ABSTENTION_MARKER = "NOT_IN_DOCUMENTS"
+
+# How much of a cited passage is stored with the answer, for display beneath it.
+# The whole chunk can be several hundred words, which is a wall of text in a
+# chat reply; the page view is where the full passage is read.
+CITATION_SNIPPET_CHARS = 300
+
 
 def ensure_dirs() -> None:
     """Create the runtime directories. Safe to call repeatedly."""
