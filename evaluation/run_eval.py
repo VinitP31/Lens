@@ -30,13 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv  # noqa: E402
 
 from backend.errors import DuplicateDocumentError  # noqa: E402
+from backend.ingestion import embedder, prepare  # noqa: E402
 from backend.retrieval import retriever  # noqa: E402
 from backend.storage import registry, vector_store  # noqa: E402
-
-# The extractor is imported inside ingest_corpus rather than here. It pulls in
-# Docling and PyTorch, whose threading runtime conflicts with Milvus Lite's on
-# macOS and aborts the process. A measuring run needs neither, and the query path
-# in the application does not import them either.
 from config import settings  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent
@@ -61,10 +57,10 @@ def ingest_corpus(db, store, sample_dir: Path) -> None:
     """Index every PDF in `sample_dir`, skipping ones already present.
 
     Uses the same modules as the application, in the same order, so the numbers
-    below describe the real system rather than a test harness.
+    below describe the real system rather than a test harness. Extraction and
+    chunking therefore run in a worker process here too, exactly as they will in
+    the backend.
     """
-    from backend.ingestion import chunker, embedder, extractor
-
     for pdf in sorted(sample_dir.glob("*.pdf")):
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         if registry.find_by_hash(db, digest):
@@ -84,11 +80,12 @@ def ingest_corpus(db, store, sample_dir: Path) -> None:
             continue
 
         try:
+            # One worker covers both stages: chunking needs the extracted
+            # elements, and sending those back would defeat the point of the
+            # separate process.
             registry.set_status(db, document.doc_id, registry.STATUS_EXTRACTING)
-            extracted = extractor.extract(pdf)
-
-            registry.set_status(db, document.doc_id, registry.STATUS_CHUNKING)
-            chunks = chunker.chunk(extracted, title=document.display_name)
+            extracted = prepare.prepare(pdf, title=document.display_name)
+            chunks = extracted.chunks
 
             registry.set_status(db, document.doc_id, registry.STATUS_EMBEDDING)
             vectors = embedder.embed_chunks(chunks)

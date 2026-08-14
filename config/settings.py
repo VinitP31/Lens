@@ -212,6 +212,24 @@ LABEL_MAX_WORDS = 4
 # are separate items on the page.
 LABEL_VALUE_MAX_GAP_POINTS = 20.0
 
+# --- Extraction worker ---------------------------------------------------
+# Extraction runs in a process of its own, because Docling and Milvus Lite each
+# bundle a copy of the OpenMP runtime and a process that initialises both dies.
+# See backend/ingestion/prepare.py for the whole story.
+
+# Longest a single document may take before the worker is stopped. Extraction
+# measured about 3s a page, and the page limit validation will enforce is 50, so
+# the ceiling is generous: it exists to catch a worker that has hung, not to
+# hurry a slow one.
+EXTRACT_TIMEOUT_SECONDS = 600.0
+
+# How often the parent looks for a result. Short enough that a worker that dies
+# is noticed promptly, long enough not to spin.
+EXTRACT_POLL_SECONDS = 0.5
+
+# Grace given to a stopped worker before it is killed outright.
+EXTRACT_SHUTDOWN_SECONDS = 10.0
+
 # --- Embedding model -----------------------------------------------------
 # Named here because the tokenizer used to measure chunk size must be the one
 # the embedding model actually uses. Measuring with a different tokenizer means
