@@ -252,7 +252,7 @@ Originals must be kept because citations render the source page. Making one stor
 | Vector index | HNSW, cosine |
 | Embeddings | `text-embedding-3-small`, 1536 dimensions |
 | Utility LLM | `gpt-4o-mini` — intent, rewrite, condense |
-| Answer LLM | `gpt-4o-mini`, compared against a bigger model using the evaluation script |
+| Answer LLM | `gpt-4o-mini`, confirmed at Stage 5. On the evaluation sets it answered 24 of 24 answerable questions, cited the expected page every time, refused 13 of 13 unanswerable questions that reached it, and invented no citation. Nothing was left for a larger model to improve |
 
 Model names live in config, never in code, so a deprecation is a one-line change. Check the model string is callable before starting.
 
@@ -733,7 +733,27 @@ Prompt order, fixed:
 
 **Temperature 0.** Retrieval is fully deterministic, so identical input retrieves identical chunks. Generation at 0 is nearly deterministic but not byte-identical, because of batching and floating-point behaviour in hosted inference. The honest claim is *same substance and same citations*, not *same bytes*.
 
-Answers stream so text appears right away.
+**Abstention is an exact string, not prose.** The model replies with `ABSTENTION_MARKER` and nothing else. Code has to recognise a refusal reliably, and matching on wording would read a model that says *"I could not find"* rather than *"I cannot find"* as a real answer — the one misreading that turns an honest refusal into a confident one.
+
+The abstention carries no text of its own. The wording belongs to the UI, which alone knows whether suggesting a wider scope would be honest.
+
+**Three outcomes, never conflated.** An answer, an abstention, or a failure. A provider that cannot be reached raises rather than abstaining: telling somebody their documents do not cover a question when the truth is that a network call failed would be a lie in the one place this system exists not to tell one.
+
+Answers stream so text appears right away. Tokens are held back only until enough has arrived to rule out the abstention marker — otherwise a user would watch `NOT_IN_DOCUMENTS` type itself out — then released. The marker is the first thing in the reply when it is used, so the delay is one word rather than the whole answer.
+
+**Measured at Stage 5**, on the same question sets as retrieval and the gate:
+
+| | Result |
+|---|---|
+| Answerable questions answered | 24/24 |
+| Citation landing on the expected page | 24/24 |
+| Answerable questions wrongly refused | 0/24 |
+| Unanswerable questions stopped by the gate | 4/17, no model call |
+| Unanswerable questions refused by the model | 13/13 of those that reached it |
+| Unanswerable questions answered anyway | 0/13 |
+| Answers citing a passage never supplied | 0 |
+
+The two refusal layers together refused 17 of 17. Neither layer alone would have: the gate cannot see that an on-topic question's answer is absent, and the prompt would never have been reached by the four the gate stopped for free.
 
 ---
 
@@ -1119,6 +1139,11 @@ Everything below lives in `settings.py`.
 | `GATE_THRESHOLD` | 0.45, measured at Stage 4 | Never a guess. Chosen inside the overlap between the two question sets: loses 0 of 24 real answers and stops 4 of 17 unanswerable ones |
 | `MAX_PER_DOCUMENT` | Off | Turn on only if measurement shows crowding |
 | `TEMPERATURE` | 0.0 | Consistency |
+| `ANSWER_MAX_OUTPUT_TOKENS` | 800 | Enough for a thorough answer over five passages. A cap so a runaway generation cannot bill without limit |
+| `ANSWER_MAX_RETRIES` | 3 | Transient provider failures only. A bad key fails identically every time |
+| `ANSWER_RETRY_BACKOFF_SECONDS` | 2.0 | Grows per attempt, so a rate limit is given room to clear |
+| `ABSTENTION_MARKER` | `NOT_IN_DOCUMENTS` | Recognised by code, so it is a fixed token rather than a sentence |
+| `CITATION_SNIPPET_CHARS` | 300 | How much of a cited passage is stored for display. The page view is where the whole passage is read |
 | `CONDENSE_CHAR_THRESHOLD` | 1500 | Above this, condense before embedding |
 | `HISTORY_WINDOW_TURNS` | 6 | Turns of chat history passed to the rewrite call. Uncapped history grows the prompt without limit, and very old turns start misleading the rewrite |
 | `MAX_RETRIES` | 3 | Uncapped retries are a runaway bill |
@@ -1177,9 +1202,11 @@ Three rules: every failure has a defined outcome, every message says what went w
 | Nothing relevant in the corpus | Refusal at the gate, no LLM call |
 | Answer only in an excluded document | Refusal, suggest widening |
 | Non-English question | Expected refusal. Documented limitation |
+| Passages retrieved, but the model reports the answer absent | Abstention shown, recorded with its own reason so it stays distinct from a gate refusal |
 | LLM cites an unsupplied number | Thrown away and logged |
 | LLM returns no valid citation | Treated as ungrounded, refusal shown |
-| LLM or embedding API error | Retry up to 3, then a clear message. Turn not saved as an answer |
+| LLM returns nothing at all | Treated as an abstention, with its own reason |
+| LLM or embedding API error | Retry up to 3, then a clear message. Turn not saved as an answer. Never reported as an abstention |
 
 ### Context and state
 
@@ -1368,7 +1395,8 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | Generation isn't byte-identical at temp 0 | Hosted inference behaviour | Wording may vary slightly | None. Retrieval and citations stay identical |
 | A table beyond the embedding input limit is split | The model accepts 8191 tokens, and a chunk above that cannot be indexed at all | A very large table is cited as more than one chunk. Header rows are repeated into each part, so no part loses its column names | Cross-page and cross-chunk table stitching at retrieval time |
 | No overlap across a section boundary | Overlap is carried inside a section only, because a chunk spanning two sections could not name one section in its citation | An answer straddling two sections is whole in neither chunk | Carry a tail across the boundary and accept the weaker citation |
-| The gate cannot catch an on-topic question whose answer is absent | Similarity measures whether a passage is about the topic, not whether it holds the fact | Measured on this corpus: 12 of 17 unanswerable questions score above a threshold that loses no real answers | None at the gate. Caught by the prompt's abstention rule, whose refusal rate is measured on the out-of-scope set |
+| The gate cannot catch an on-topic question whose answer is absent | Similarity measures whether a passage is about the topic, not whether it holds the fact | Measured on this corpus: 13 of 17 unanswerable questions score above a threshold that loses no real answers | None at the gate. Caught by the prompt's abstention rule, which refused 13 of those 13 when measured at Stage 5 |
+| Nothing detects an answer supported by the wrong passage | The model chooses which passage supports which sentence, and no code can check that a sentence follows from a passage | An answer can be right, cited, and citing the wrong page. Measured at Stage 5: 24 of 24 answers cited the page the golden set records, so it was not observed here — but it is not prevented | None automatic. The cited page is one click away, which is the design's answer to it |
 | A wide label-value grid keeps its pairing unstated | Rejoining a label to its value requires the two to sit within `LABEL_VALUE_MAX_GAP_POINTS`. At the width of a full page column, anything on the same line would qualify | The label and the value stay as separate chunks. The section path usually still carries the label, so the pairing is degraded rather than lost | Detect a genuine grid by column alignment across several rows, then pair within it |
 | Extraction is slower than it needs to be | Each document gets a fresh worker process, so the Docling models load again every time | Roughly 40s against 18s in-process, on the sample manual. Paid in the background per upload | A worker kept alive across a batch, at the cost of losing per-document isolation |
 | Short subsections become short chunks | Structure-first honours the document's own granularity, and a one-paragraph subsection is one chunk | Many small chunks compete against larger ones for a retrieval slot. On one sample manual, 31 of 53 prose chunks were under the 120-token minimum | Merge sibling subsections under a shared parent, only if measurement shows a cost |
@@ -1505,6 +1533,9 @@ Docling and Milvus Lite each bundle a copy of the OpenMP runtime, which refuses 
 **D-28 · A bare value is rejoined to its label.**
 A label and a bare value set apart on the page arrive as two elements, and the pairing is then unrecorded. Measured on the sample RFP this produced a confidently wrong answer carrying a valid citation — the failure mode with no downstream defence, since the citation is genuine and only the passage is mis-assembled. Both wording and geometry must agree before two elements are joined. *Rejected:* joining on wording alone, which attaches a heading to the first number beneath it, and on geometry alone, which joins whatever sits close together; also rejected, pairing across a full-width column gap, where any two cells on a line would qualify. *Costs:* wide grids keep their pairing unstated, degraded to whatever the section path carries.
 
+**D-29 · Abstention is an exact marker, and an ungrounded answer becomes one.**
+The model replies with a fixed token rather than prose, because code has to recognise a refusal and matching on wording would read a rephrased refusal as an answer. Separately, an answer whose every citation was invented is reported as an abstention rather than shown without sources: nothing in it can be checked, which is precisely the state this system exists to avoid. A provider outage is neither, and raises. *Rejected:* detecting refusal from prose; showing an uncited answer with a warning; returning an outage as an abstention. *Costs:* the model must follow one exact instruction, which the Stage 5 measurement checks rather than assumes — 13 of 13 unanswerable questions that reached it were refused, and no citation was invented.
+
 ---
 
 ## 23. Build order
@@ -1557,6 +1588,8 @@ Prompt assembly, grounded generation, streaming, citation validation and resolut
 **Gate:** end-to-end answers with validated citations and a complete metrics table, including a **measured abstention rate on the out-of-scope set**.
 
 That last number is not optional. Calibration at Stage 4 showed the confidence gate cannot catch an on-topic question whose answer is absent, so the prompt's abstention rule is the only thing standing between those questions and a confident, well-cited, invented answer. Treating it as a prompt instruction and assuming it works would leave half the system's correctness unmeasured.
+
+**Met.** 24/24 answered, 24/24 citing the expected page, 0 wrongly refused, 13/13 of the unanswerable questions reaching the model refused, 0 invented citations. Run with `python evaluation/run_eval.py --answers`; the flag exists because retrieval and the gate are free to measure and are re-run constantly, while this costs a model call per question.
 
 At this point the system works. Everything before is foundation, everything after is interface and hardening.
 
