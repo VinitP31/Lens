@@ -106,6 +106,15 @@ RUN_IN_HEADING = re.compile(
 # ending in a colon is not mistaken for a label.
 RUN_IN_LABEL = re.compile(r"^([A-Z][A-Za-z0-9'()/&.\- ]{2,58}?):\s+(?=[A-Za-z])")
 
+# A bare value: a number on its own, optionally with a currency sign or a short
+# unit. "30 pts", "15%", "$5,000.00", "12". Deliberately allows nothing else,
+# because this shape is what licenses joining the element to the one before it.
+BARE_VALUE = re.compile(r"^[$€£¥]?\d[\d,]*(?:\.\d+)?\s*(?:%|[A-Za-z]{1,4}\.?)?$")
+
+# A bare label: a few words of ordinary text naming a thing, with no sentence
+# punctuation and no value of its own. "Fees", "Total weight", "Annual leave:".
+BARE_LABEL = re.compile(r"^[A-Za-z][A-Za-z&/\-' ]*:?$")
+
 # Characters that are rarely what a document really says in running text, and are
 # a common sign that a symbol was mis-decoded. Their presence only triggers a
 # check against a second reader; it never implies a particular replacement.
@@ -851,6 +860,82 @@ def _in_reading_order(elements: list[Element]) -> list[Element]:
     return ordered
 
 
+def _envelope(element: Element) -> tuple[float, float, float, float] | None:
+    """The one box that contains all of an element's boxes."""
+    if not element.bboxes:
+        return None
+    return (
+        min(box[0] for box in element.bboxes),
+        min(box[1] for box in element.bboxes),
+        max(box[2] for box in element.bboxes),
+        max(box[3] for box in element.bboxes),
+    )
+
+
+def _is_pair(label: Element, value: Element) -> bool:
+    """Whether these two elements are one label-and-value fact split in two.
+
+    Both the wording and the geometry have to agree. Wording alone would join a
+    heading to the first number under it, anywhere on the page; geometry alone
+    would join any two things that happen to sit close together.
+    """
+    if label.element_type != TYPE_TEXT or value.element_type != TYPE_TEXT:
+        return False
+    if label.page != value.page:
+        return False
+
+    text = label.text.strip()
+    if not BARE_LABEL.match(text) or not 1 <= len(text.split()) <= settings.LABEL_MAX_WORDS:
+        return False
+    if not BARE_VALUE.match(value.text.strip()):
+        return False
+
+    first, second = _envelope(label), _envelope(value)
+    if first is None or second is None:
+        return False
+
+    # Beneath its label, or beside it. Which one depends on whether the boxes
+    # share a horizontal or a vertical span; anything diagonal is not a pair.
+    if first[0] < second[2] and second[0] < first[2]:
+        gap = second[1] - first[3]
+    elif first[1] < second[3] and second[1] < first[3]:
+        gap = second[0] - first[2]
+    else:
+        return False
+    return 0 <= gap <= settings.LABEL_VALUE_MAX_GAP_POINTS
+
+
+def _with_paired_values(elements: list[Element]) -> list[Element]:
+    """Rejoin a value to the label it belongs to.
+
+    Run after reading order is settled, so that "next to" means next on the page
+    rather than next in the order Docling happened to emit.
+
+    Nothing is added or removed: the two texts are joined with a colon, and the
+    boxes of both are kept so the citation highlights the whole fact.
+    """
+    joined: list[Element] = []
+    index = 0
+    while index < len(elements):
+        current = elements[index]
+        following = elements[index + 1] if index + 1 < len(elements) else None
+        if following is not None and _is_pair(current, following):
+            joined.append(
+                Element(
+                    text=f"{current.text.rstrip(':')}: {following.text}",
+                    page=current.page,
+                    element_type=TYPE_TEXT,
+                    section_path=current.section_path,
+                    bboxes=current.bboxes + following.bboxes,
+                )
+            )
+            index += 2
+            continue
+        joined.append(current)
+        index += 1
+    return joined
+
+
 def extract(pdf_path: Path) -> ExtractedDocument:
     """Extract one PDF into ordered elements with full provenance.
 
@@ -971,6 +1056,7 @@ def extract(pdf_path: Path) -> ExtractedDocument:
     elements = _without_duplicate_captions(elements)
     elements = _with_orphan_headings(elements, heading_records)
     elements = _in_reading_order(elements)
+    elements = _with_paired_values(elements)
 
     return ExtractedDocument(
         page_count=page_count,

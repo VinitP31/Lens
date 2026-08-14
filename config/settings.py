@@ -189,6 +189,29 @@ COLUMN_WIDTH_SIMILARITY = 0.7
 # cells set fractionally apart still order left to right.
 ROW_BAND = 2.0
 
+# --- Label and value pairing ---------------------------------------------
+# A document often states a fact as a short label beside or above a bare value:
+# "Fees" then "30 pts". Layout analysis emits each as its own element, and once
+# they are two elements nothing records that they belong together. Several such
+# pairs in a row read as an undifferentiated list of words and numbers, and a
+# model asked which number belongs to which label can only guess.
+#
+# The two are rejoined into a single element, "Fees: 30 pts", so the pairing
+# survives chunking, embedding and the prompt.
+#
+# Both sides are held to a strict shape, because merging two elements that were
+# never a pair invents a fact the document does not state.
+
+# The label may be at most this many words. A label names a thing; anything
+# longer is a sentence, and a sentence followed by a number is not a pair.
+LABEL_MAX_WORDS = 4
+
+# The gap between the label and its value, in points. Measured between the
+# nearest edges, so it covers a value set beside its label as well as beneath
+# it. Roughly one line of ordinary text - further apart than that and the two
+# are separate items on the page.
+LABEL_VALUE_MAX_GAP_POINTS = 20.0
+
 # --- Embedding model -----------------------------------------------------
 # Named here because the tokenizer used to measure chunk size must be the one
 # the embedding model actually uses. Measuring with a different tokenizer means
