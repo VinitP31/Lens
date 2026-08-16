@@ -332,9 +332,16 @@ def discard(connection: sqlite3.Connection, doc_id: str) -> None:
     answer some questions and silently skip the rest of its own content, which
     is worse than not being there. The row goes, and the failure survives in the
     trace log instead.
+
+    Its jobs go with it, in the same transaction. `ingestion_jobs.doc_id` is a
+    foreign key, so leaving them would make this raise and turn every rollback
+    into a second failure. The trace log is where a failed ingest is recorded, so
+    nothing is lost by removing the job row - and a job pointing at a document
+    that no longer exists could not be reported anyway.
     """
-    connection.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
-    connection.commit()
+    with connection:
+        connection.execute("DELETE FROM ingestion_jobs WHERE doc_id = ?", (doc_id,))
+        connection.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
 
 
 def embed_models_in_use(connection: sqlite3.Connection) -> set[str]:
@@ -380,3 +387,108 @@ def unfinished(connection: sqlite3.Connection) -> list[Document]:
         tuple(TERMINAL_STATUSES),
     ).fetchall()
     return [_row_to_document(row) for row in rows]
+
+
+# --- Ingestion jobs ------------------------------------------------------
+# A job is what the UI polls while a document is being indexed. The document row
+# already holds the stage; the job adds a fraction and a human sentence, so an
+# upload that sits on one stage for a minute still shows something honest.
+
+
+@dataclass(frozen=True)
+class Job:
+    """One ingestion run, as the status endpoint reports it."""
+
+    job_id: str
+    doc_id: str
+    stage: str
+    progress: float
+    message: str | None
+    started_at: str
+    finished_at: str | None
+
+    @property
+    def finished(self) -> bool:
+        return self.finished_at is not None
+
+
+def stage_progress(stage: str) -> float:
+    """How far through ingestion a stage is, as a fraction.
+
+    Derived from the position of the stage in `INGESTION_STAGES` rather than
+    written down per stage. A stage inserted into that tuple then reports a
+    sensible fraction without anyone maintaining a second list that could
+    disagree with the first.
+    """
+    if stage not in INGESTION_STAGES:
+        return 0.0
+    return INGESTION_STAGES.index(stage) / (len(INGESTION_STAGES) - 1)
+
+
+def start_job(connection: sqlite3.Connection, doc_id: str) -> Job:
+    """Open a job for a document about to be ingested."""
+    job = Job(
+        job_id=uuid.uuid4().hex[:12],
+        doc_id=doc_id,
+        stage=STATUS_QUEUED,
+        progress=stage_progress(STATUS_QUEUED),
+        message=None,
+        started_at=_now(),
+        finished_at=None,
+    )
+    with connection:
+        connection.execute(
+            "INSERT INTO ingestion_jobs (job_id, doc_id, stage, progress, message, started_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (job.job_id, job.doc_id, job.stage, job.progress, job.message, job.started_at),
+        )
+    return job
+
+
+def advance_job(
+    connection: sqlite3.Connection, job_id: str, stage: str, message: str | None = None
+) -> None:
+    """Move a job to a stage, updating its fraction to match.
+
+    The fraction is never passed in. Two callers disagreeing about how far
+    "embedding" is would make the progress bar jump backwards.
+    """
+    with connection:
+        connection.execute(
+            "UPDATE ingestion_jobs SET stage = ?, progress = ?, message = ? WHERE job_id = ?",
+            (stage, stage_progress(stage), message, job_id),
+        )
+
+
+def finish_job(connection: sqlite3.Connection, job_id: str, stage: str) -> None:
+    """Close a job, successfully or not.
+
+    The final stage is recorded rather than assumed, so a failed job still says
+    where it stopped. That is the only record of what went wrong once the
+    document row itself has been discarded.
+    """
+    with connection:
+        connection.execute(
+            "UPDATE ingestion_jobs SET stage = ?, progress = ?, finished_at = ? WHERE job_id = ?",
+            (stage, stage_progress(stage), _now(), job_id),
+        )
+
+
+def latest_job(connection: sqlite3.Connection, doc_id: str) -> Job | None:
+    """The most recent job for a document, or None if it has never been ingested."""
+    row = connection.execute(
+        "SELECT * FROM ingestion_jobs WHERE doc_id = ?"
+        " ORDER BY started_at DESC, rowid DESC LIMIT 1",
+        (doc_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Job(
+        job_id=row["job_id"],
+        doc_id=row["doc_id"],
+        stage=row["stage"],
+        progress=row["progress"],
+        message=row["message"],
+        started_at=row["started_at"],
+        finished_at=row["finished_at"],
+    )
