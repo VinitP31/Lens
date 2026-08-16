@@ -26,6 +26,13 @@ to import the other's libraries.
 This also makes the separation the backend rules already ask for literal rather
 than aspirational: ingestion is a batch job, the query path is interactive, and
 now they cannot even share an address space by accident.
+
+One thing a caller has to know. "spawn" re-imports the module that started the
+process, so any script that calls this must keep its work behind
+`if __name__ == "__main__":`. Without that guard the child re-runs the script
+from the top - opening the vector store a second time, ingesting again - and dies
+in a way that surfaces only as a worker exit code. Running under a server does
+not have this problem, because the main module is the server's own.
 """
 
 import multiprocessing
