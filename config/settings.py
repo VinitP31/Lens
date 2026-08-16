@@ -384,6 +384,20 @@ OCR_TRIGGER_CHARS_PER_PAGE = 150
 # rejected rather than indexed as near-empty chunks.
 MIN_CHARS_PER_PAGE = 150
 
+# --- Conversations -------------------------------------------------------
+# Chat state lives in SQLite because Streamlit wipes its own session state on
+# every refresh.
+
+# Turns of history used to rewrite a follow-up into a standalone question. A turn
+# is one user message and one answer, so the query reads twice this many rows.
+# Bounded because unbounded history grows the prompt without limit, and turns
+# from far enough back start describing a different subject.
+HISTORY_WINDOW_TURNS = 6
+
+# Longest automatic chat title. Cut at a word boundary, so the sidebar shows a
+# readable name rather than a truncated sentence.
+TITLE_MAX_CHARS = 60
+
 # --- Generation ----------------------------------------------------------
 # The gate has already decided the question is worth answering by the time any
 # of this is used. What is left is to answer only from the passages given, cite

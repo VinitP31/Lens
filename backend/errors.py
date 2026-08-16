@@ -140,3 +140,20 @@ class GenerationFailedError(LensError):
     """
 
     code = "generation_failed"
+
+
+class ConversationNotFoundError(LensError):
+    """No conversation with this id."""
+
+    code = "conversation_not_found"
+
+
+class EmptyScopeError(LensError):
+    """A chat was given no documents to search.
+
+    Refused rather than stored. Every question against an empty scope would be
+    refused for having nothing to search, and the user would read that as the app
+    being broken rather than as the setting they chose.
+    """
+
+    code = "empty_scope"
