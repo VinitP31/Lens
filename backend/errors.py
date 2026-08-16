@@ -38,6 +38,34 @@ class EmptyDocumentError(LensError):
     code = "empty_document"
 
 
+class CorruptFileError(LensError):
+    """The upload could not be opened as a PDF at all."""
+
+    code = "corrupt_file"
+
+
+class EncryptedPDFError(LensError):
+    """The PDF is password protected, so its text cannot be read.
+
+    Separate from a corrupt file. The user can do something about this one - the
+    two must not share a message.
+    """
+
+    code = "encrypted_pdf"
+
+
+class FileTooLargeError(LensError):
+    """Over the upload size limit."""
+
+    code = "file_too_large"
+
+
+class TooManyPagesError(LensError):
+    """Over the page limit."""
+
+    code = "too_many_pages"
+
+
 # --- Embedding -----------------------------------------------------------
 
 

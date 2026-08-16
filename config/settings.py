@@ -23,6 +23,14 @@ PROFILE_DIR = DATA_DIR / "profiles"
 # local file, so a restart loses nothing and there is no server to run.
 DB_PATH = DATA_DIR / "lens.db"
 
+# --- Upload limits -------------------------------------------------------
+# Checked before any expensive work. Both bound the worst case rather than
+# expressing a preference: extraction cost scales with pages, and the whole file
+# is held in memory while it is hashed and opened.
+
+MAX_PAGES = 50
+MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MB
+
 # --- Extraction ----------------------------------------------------------
 # Docling's standard PDF pipeline. AUTO picks the best available accelerator,
 # which is Apple MPS on this machine and CPU elsewhere.
