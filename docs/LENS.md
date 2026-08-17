@@ -1190,6 +1190,7 @@ Everything below lives in `settings.py`.
 | `OCR_ENGINE` | Default must be cross-platform |
 | `MILVUS_URI` | Local file or server address |
 | `DB_PATH`, `UPLOAD_DIR` | Local paths |
+| `TRACE_DIR`, `QUERY_TRACE_PATH`, `DOCUMENT_TRACE_PATH` | Append-only JSONL trace files |
 
 ### Secrets
 
@@ -1258,6 +1259,7 @@ Three rules: every failure has a defined outcome, every message says what went w
 | Milvus unreachable | Startup fails with a clear message. No degraded mode |
 | Embedding model doesn't match the collection | Startup fails loudly |
 | Missing API key | Startup fails naming the variable |
+| Registry lists chunks the vector store does not have | Startup fails. The two stores are separate files and nothing keeps them in step; a library whose text is gone answers every question with "not found in your documents" and says nothing about why. Only empty-versus-not is compared, because chunk totals drift legitimately — a soft-deleted document keeps its chunks and a reingest upserts |
 | Invalid API key | Clear error on first use |
 | SQLite missing | Created and migrated on first start |
 
@@ -1397,6 +1399,12 @@ The `visibility` column exists but is unused. When login is added, permissions b
 | Per-stage latency | Finding slowness |
 
 Logging both distance and similarity is required, since confusing them is the most likely and most expensive bug here.
+
+Written to `QUERY_TRACE_PATH` and `DOCUMENT_TRACE_PATH`. JSONL rather than tables: it appends without locking, survives a crash mid-write with the loss of at most one line, and reads with the tools already on the machine.
+
+**A trace can never break the thing it describes.** An unwritable path is logged and swallowed. A diagnostic that can fail the request it was recording is worse than no diagnostic.
+
+A failed ingest is written **before** the rollback removes its row, so the trace is the only surviving record that the document was ever attempted — which is what the data model intends, since a failed document is not a library entry.
 
 ### Per document
 
@@ -1566,6 +1574,9 @@ A label and a bare value set apart on the page arrive as two elements, and the p
 
 **D-29 · Abstention is an exact marker, and an ungrounded answer becomes one.**
 The model replies with a fixed token rather than prose, because code has to recognise a refusal and matching on wording would read a rephrased refusal as an answer. Separately, an answer whose every citation was invented is reported as an abstention rather than shown without sources: nothing in it can be checked, which is precisely the state this system exists to avoid. A provider outage is neither, and raises. *Rejected:* detecting refusal from prose; showing an uncited answer with a warning; returning an outage as an abstention. *Costs:* the model must follow one exact instruction, which the Stage 5 measurement checks rather than assumes — 13 of 13 unanswerable questions that reached it were refused, and no citation was invented.
+
+**D-31 · The two stores must agree at startup.**
+The registry and the vector store are separate files with nothing keeping them in step: delete one, restore one from a backup, or fill the disk mid-write, and the library still lists documents whose text is gone. Measured by accident during testing — the backend started reporting `status ok, 6 documents, 0 chunks` and would have refused every question with no explanation available to the user. So a registry expecting chunks against an empty store now refuses to start. *Rejected:* comparing exact counts, which would refuse a healthy library because soft-deleted documents keep their chunks and a reingest upserts; repairing automatically, which would mean deciding on the user's behalf which store is right. *Costs:* one check and a re-index when it fires.
 
 **D-30 · A rewrite that loses a specific is discarded in code.**
 The condenser and the rewrite both restate a question, and both were measured dropping the number that found the answer — retrieving the topic instead of the fact and turning an answerable question into an honest refusal. Prompt instructions reduced it without removing it, and failed again once history was in the prompt. Numbers and codes in the original are therefore compared against the rewrite, and a rewrite that lost one is thrown away. *Rejected:* stronger wording alone, which was tried and measured insufficient; trusting the model on something that is not a language decision. *Costs:* a question whose rewrite legitimately drops a number is searched in its longer original form, which is the safe direction.
