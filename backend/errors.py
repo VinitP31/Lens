@@ -191,3 +191,14 @@ class RenderFailedError(LensError):
     """
 
     code = "render_failed"
+
+
+class UnreadableDocumentError(LensError):
+    """The PDF has pages but no readable text, even after OCR.
+
+    Rejected rather than indexed. A document that produced almost nothing would
+    sit in the library answering nothing, and a user would have no way to tell
+    that from the system simply not finding their answer.
+    """
+
+    code = "unreadable_document"

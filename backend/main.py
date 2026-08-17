@@ -45,6 +45,7 @@ STATUS_BY_CODE = {
     "encrypted_pdf": 415,
     "corrupt_file": 415,
     "empty_document": 422,
+    "unreadable_document": 422,
     "empty_scope": 422,
     "document_not_found": 404,
     "conversation_not_found": 404,

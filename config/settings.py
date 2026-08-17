@@ -384,6 +384,16 @@ OCR_TRIGGER_CHARS_PER_PAGE = 150
 # rejected rather than indexed as near-empty chunks.
 MIN_CHARS_PER_PAGE = 150
 
+# The engine. RapidOCR by default because it is cross-platform and needs no
+# system package: Tesseract would make the README depend on a working brew or apt
+# install before anything runs.
+OCR_ENGINE = "rapidocr"
+
+# Languages the engine is asked to consider. English only in v1, matching the
+# embedding model - recognising text the rest of the system cannot search would
+# cost time for nothing.
+OCR_LANGUAGES = ("english",)
+
 # --- Page rendering ------------------------------------------------------
 # A citation is only checkable if you can see the page it came from, so the cited
 # region is drawn onto a picture of the page rather than shown as coordinates.

@@ -21,6 +21,11 @@ openai==3.0.0
 docling==2.119.0
 pymupdf==1.28.2
 
+# OCR, used only when a PDF has no text layer. RapidOCR needs no system package,
+# unlike Tesseract, so a clean clone works without brew or apt first.
+rapidocr==3.9.2
+onnxruntime==1.28.0
+
 # Vector store
 pymilvus[milvus_lite]==3.0.1
 
