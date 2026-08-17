@@ -20,12 +20,14 @@ from a killed process, and is cleaned up the same way a live failure would be.
 """
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from backend.errors import EmptyDocumentError
 from backend.ingestion import embedder, prepare, validator
+from backend.logging import trace
 from backend.storage import files, registry, vector_store
 
 log = logging.getLogger(__name__)
@@ -124,6 +126,11 @@ def ingest(
     """
     prepare_document = prepare_document or prepare.prepare
     document = registry.get(db, doc_id)
+    started = time.perf_counter()
+    record = trace.DocumentTrace(doc_id=doc_id, display_name=document.display_name)
+
+    def elapsed() -> int:
+        return int((time.perf_counter() - started) * 1000)
 
     def stage(name: str, message: str | None = None) -> None:
         registry.set_status(db, doc_id, name)
@@ -141,11 +148,21 @@ def ingest(
             # stored as a document that is present and answers nothing.
             raise EmptyDocumentError("no indexable text found in the document")
 
+        record.stage_ms["extract"] = elapsed()
+        record.page_count = prepared.page_count
+        record.chars_per_page = prepared.chars_per_page
+        record.ocr_applied = prepared.needs_ocr
+        record.table_count = prepared.table_count
+        record.image_count = prepared.picture_count
+        record.chunk_count = len(prepared.chunks)
+
         stage(registry.STATUS_EMBEDDING, f"embedding {len(prepared.chunks)} chunks")
         vectors = embedder.embed_chunks(prepared.chunks, embed=embed)
+        record.stage_ms["embed"] = elapsed() - sum(record.stage_ms.values())
 
         stage(registry.STATUS_INDEXING, "writing to the index")
         written = vector_store.upsert(store, doc_id, prepared.chunks, vectors)
+        record.stage_ms["index"] = elapsed() - sum(record.stage_ms.values())
 
         registry.mark_ready(
             db,
@@ -158,6 +175,9 @@ def ingest(
             ocr_applied=prepared.needs_ocr,
         )
         registry.finish_job(db, job_id, registry.STATUS_READY)
+        record.chunk_count = written
+        record.total_ms = elapsed()
+        trace.write_document(record)
         return written
 
     except Exception as error:
@@ -165,7 +185,14 @@ def ingest(
         # removes the job row along with the document. The log is the only place a
         # failed ingest survives, which is what the data model intends: a failed
         # document is not a library entry, so there is nothing to keep a row for.
-        log.warning("ingest failed for %s at stage %s: %s", doc_id, _stage_of(db, job_id), error)
+        failed_at = _stage_of(db, job_id)
+        log.warning("ingest failed for %s at stage %s: %s", doc_id, failed_at, error)
+        # Written before the rollback removes the row. Once the document is gone
+        # this line is the only record that it was ever attempted.
+        record.failed_at = failed_at
+        record.error = f"{type(error).__name__}: {error}"
+        record.total_ms = elapsed()
+        trace.write_document(record)
         _rollback(db, store, doc_id, document.content_hash)
         raise
 

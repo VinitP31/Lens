@@ -18,6 +18,13 @@ DATA_DIR = PROJECT_ROOT / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 VECTOR_DIR = DATA_DIR / "vectors"
 PROFILE_DIR = DATA_DIR / "profiles"
+TRACE_DIR = DATA_DIR / "traces"
+
+# One line of JSON per query and per indexed document. Append-only files rather
+# than tables: they survive a crash mid-write with the loss of at most one line,
+# and are readable with the tools already on the machine.
+QUERY_TRACE_PATH = TRACE_DIR / "queries.jsonl"
+DOCUMENT_TRACE_PATH = TRACE_DIR / "documents.jsonl"
 
 # Application state: the document registry, conversations and messages. One
 # local file, so a restart loses nothing and there is no server to run.
@@ -458,5 +465,5 @@ CITATION_SNIPPET_CHARS = 300
 
 def ensure_dirs() -> None:
     """Create the runtime directories. Safe to call repeatedly."""
-    for directory in (DATA_DIR, UPLOAD_DIR, VECTOR_DIR, PROFILE_DIR):
+    for directory in (DATA_DIR, UPLOAD_DIR, VECTOR_DIR, PROFILE_DIR, TRACE_DIR):
         directory.mkdir(parents=True, exist_ok=True)
