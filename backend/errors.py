@@ -174,3 +174,20 @@ class StoreMismatchError(LensError):
     """
 
     code = "store_mismatch"
+
+
+class PageNotFoundError(LensError):
+    """The requested page is outside this document."""
+
+    code = "page_not_found"
+
+
+class RenderFailedError(LensError):
+    """The page could not be turned into an image.
+
+    Distinct from a missing page. The original file is gone or unreadable, which
+    means a citation into it can no longer be checked - worth saying plainly
+    rather than showing a blank frame.
+    """
+
+    code = "render_failed"

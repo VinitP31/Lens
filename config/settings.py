@@ -238,13 +238,6 @@ LABEL_VALUE_MAX_GAP_POINTS = 20.0
 # hurry a slow one.
 EXTRACT_TIMEOUT_SECONDS = 600.0
 
-# How often the parent looks for a result. Short enough that a worker that dies
-# is noticed promptly, long enough not to spin.
-EXTRACT_POLL_SECONDS = 0.5
-
-# Grace given to a stopped worker before it is killed outright.
-EXTRACT_SHUTDOWN_SECONDS = 10.0
-
 # --- Embedding model -----------------------------------------------------
 # Named here because the tokenizer used to measure chunk size must be the one
 # the embedding model actually uses. Measuring with a different tokenizer means
@@ -390,6 +383,29 @@ OCR_TRIGGER_CHARS_PER_PAGE = 150
 # Still below this after OCR means the file is genuinely unreadable, and is
 # rejected rather than indexed as near-empty chunks.
 MIN_CHARS_PER_PAGE = 150
+
+# --- Page rendering ------------------------------------------------------
+# A citation is only checkable if you can see the page it came from, so the cited
+# region is drawn onto a picture of the page rather than shown as coordinates.
+#
+# An image rather than an embedded PDF viewer: browsers treat a page anchor in an
+# iframe inconsistently and some ignore it, and drawing an arbitrary box over the
+# cited text is not possible in a viewer at all.
+
+# Enough to read body text on screen without making the file large. A page at
+# this density is roughly 1275x1650 for US Letter.
+RENDER_DPI = 150
+
+# Translucent so the words underneath stay readable. The point is to show where
+# the answer came from, not to obscure it.
+HIGHLIGHT_FILL = (1.0, 0.85, 0.25)
+HIGHLIGHT_OPACITY = 0.32
+HIGHLIGHT_BORDER = (0.85, 0.6, 0.05)
+HIGHLIGHT_BORDER_WIDTH = 0.8
+
+# A box tight around a line of text is hard to see. A little air makes it read as
+# a highlight rather than as an underline.
+HIGHLIGHT_PADDING = 1.5
 
 # --- Frontend to backend -------------------------------------------------
 # The UI is a separate process and reaches the backend over HTTP only. Named here

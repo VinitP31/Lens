@@ -278,3 +278,18 @@ def chunk_ids(client: MilvusClient, doc_id: str) -> list[str]:
         limit=16384,
     )
     return sorted((row["chunk_id"] for row in rows), key=lambda value: int(value.split(":")[-1]))
+
+
+def get_chunk(client: MilvusClient, identifier: str) -> dict | None:
+    """One chunk by its id, or None.
+
+    Used when rendering a cited page: the citation stored on a message carries the
+    coordinates already, but a request that arrives with only a chunk id - a
+    reloaded page, a shared link - has to look them up.
+    """
+    rows = client.get(collection_name=settings.MILVUS_COLLECTION, ids=[identifier])
+    if not rows:
+        return None
+    row = dict(rows[0])
+    row["bboxes"] = _as_boxes(row.get("bboxes"))
+    return row
