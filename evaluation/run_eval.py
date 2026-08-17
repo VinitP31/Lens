@@ -85,7 +85,10 @@ def ingest_corpus(db, store, sample_dir: Path) -> None:
     chunking therefore run in a worker process here too, exactly as they will in
     the backend.
     """
-    for pdf in sorted(sample_dir.glob("*.pdf")):
+    # The stress PDFs are deliberately excluded. They exist to show how the
+    # pipeline degrades on a scanned or two-column file, and indexing them would
+    # put content into the library that no evaluation question is about.
+    for pdf in sorted(p for p in sample_dir.glob("*.pdf") if not p.name.startswith("stress_")):
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         if registry.find_by_hash(db, digest):
             print(f"  already indexed  {pdf.name}")

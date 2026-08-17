@@ -111,18 +111,32 @@ def main() -> int:
         action="store_true",
         help="also write extracted text per page to data/profiles/",
     )
+    parser.add_argument(
+        "--ocr",
+        action="store_true",
+        help="read the file the way ingestion would, applying OCR if the text layer is too thin",
+    )
     args = parser.parse_args()
 
     failures = 0
     for path in args.pdfs:
         try:
-            doc = extractor.extract(path)
+            if args.ocr:
+                # The same call ingestion makes, so the report shows what would
+                # actually be indexed rather than only what the first pass found.
+                from backend.ingestion import ocr
+
+                doc, applied = ocr.read(path)
+            else:
+                doc, applied = extractor.extract(path), False
         except LensError as error:
             print(f"\n{path.name}\n  FAILED [{error.code}] {error.detail}")
             failures += 1
             continue
 
         _report(path, doc)
+        if args.ocr:
+            print(f"  OCR applied          {applied}")
         if args.dump:
             print(f"  text written to      {_dump(path, doc)}")
 

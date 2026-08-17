@@ -52,7 +52,10 @@ def corpus_audit(sample_dir: Path) -> bool:
     from backend.ingestion import chunker, extractor
     from config import settings
 
-    pdfs = sorted(sample_dir.glob("*.pdf"))
+    # stress_* files are held outside the corpus on purpose: they are run through
+    # profile_pdf.py by hand, never indexed, and would fail these invariants by
+    # design.
+    pdfs = sorted(p for p in sample_dir.glob("*.pdf") if not p.name.startswith("stress_"))
     if not pdfs:
         print(f"[{FAIL}] corpus audit: no PDFs in {sample_dir}")
         return False
