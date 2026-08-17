@@ -41,17 +41,21 @@ def main(argv: list[str]) -> int:
     try:
         # Imported here, not at module scope: the import itself is the expensive,
         # incompatible thing this program exists to isolate.
-        from backend.ingestion import chunker, extractor
+        from backend.ingestion import chunker, ocr
         from backend.ingestion.prepare import Prepared
 
-        extracted = extractor.extract(Path(pdf_path))
+        # Reads normally, and falls back to OCR only if the first pass found
+        # almost nothing. `ocr_applied` says which happened, because a user is
+        # entitled to know an answer came from a machine's reading of a picture
+        # rather than from the document's own text.
+        extracted, ocr_applied = ocr.read(Path(pdf_path))
         prepared = Prepared(
             chunks=chunker.chunk(extracted, title=title),
             page_count=extracted.page_count,
             table_count=extracted.table_count,
             picture_count=extracted.picture_count,
             chars_per_page=extracted.chars_per_page,
-            needs_ocr=extracted.needs_ocr,
+            needs_ocr=ocr_applied,
             seconds=time.perf_counter() - started,
         )
         Path(output).write_bytes(pickle.dumps(("ok", prepared)))

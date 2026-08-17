@@ -22,7 +22,9 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
     AcceleratorDevice,
     AcceleratorOptions,
+    OcrMode,
     PdfPipelineOptions,
+    RapidOcrOptions,
 )
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.common.content_layer import ContentLayer
@@ -167,22 +169,33 @@ class ExtractedDocument:
         return self.chars_per_page < settings.OCR_TRIGGER_CHARS_PER_PAGE
 
 
-@lru_cache(maxsize=1)
-def _converter() -> DocumentConverter:
-    """Build the Docling converter once.
+@lru_cache(maxsize=2)
+def _converter(with_ocr: bool = False) -> DocumentConverter:
+    """Build a Docling converter once per mode.
 
     Construction loads layout and table models, which costs seconds and a few
-    hundred megabytes, so it is shared across documents for the process
-    lifetime.
+    hundred megabytes, so each is shared across documents for the process
+    lifetime. Two are cached rather than one: a document that needs OCR is read
+    twice, once each way, and rebuilding the models for the second pass would
+    double an already slow path.
+
+    OCR is off in the ordinary converter. Running it on a PDF that already has a
+    text layer roughly triples the time and replaces exact text with a guess.
     """
     pipeline_options = PdfPipelineOptions()
-    # OCR is a separate, conditional stage. Extraction never pays for it.
-    pipeline_options.do_ocr = False
+    pipeline_options.do_ocr = with_ocr
     pipeline_options.do_table_structure = settings.DOCLING_DETECT_TABLES
     pipeline_options.table_structure_options.do_cell_matching = settings.DOCLING_MATCH_TABLE_CELLS
     pipeline_options.accelerator_options = AcceleratorOptions(
         device=AcceleratorDevice(settings.DOCLING_ACCELERATOR.lower())
     )
+
+    if with_ocr:
+        # Only the parts of a page that carry no text are read by the engine.
+        # `FULL_PAGE` would discard the exact text on a document that is mostly
+        # digital and only partly scanned, replacing it with a guess.
+        pipeline_options.ocr_options = RapidOcrOptions(mode=OcrMode.PDF_AWARE_LAYOUT_REGIONS)
+
     return DocumentConverter(
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
     )
@@ -936,7 +949,7 @@ def _with_paired_values(elements: list[Element]) -> list[Element]:
     return joined
 
 
-def extract(pdf_path: Path) -> ExtractedDocument:
+def extract(pdf_path: Path, with_ocr: bool = False) -> ExtractedDocument:
     """Extract one PDF into ordered elements with full provenance.
 
     Raises:
@@ -948,7 +961,7 @@ def extract(pdf_path: Path) -> ExtractedDocument:
     """
     started = time.perf_counter()
     try:
-        result = _converter().convert(pdf_path)
+        result = _converter(with_ocr).convert(pdf_path)
     except Exception as exc:  # noqa: BLE001 - any Docling failure is one outcome
         raise ExtractionFailedError(f"{type(exc).__name__}: {exc}") from exc
     seconds = time.perf_counter() - started
