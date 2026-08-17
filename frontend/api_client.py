@@ -124,6 +124,26 @@ def status(doc_id: str) -> dict:
     return _get(f"/documents/{doc_id}/status")
 
 
+def page_image(doc_id: str, page: int, chunk_id: str | None = None) -> bytes:
+    """A PNG of one page, with the cited region highlighted.
+
+    Returns the bytes rather than a URL so the image travels through the same
+    client as everything else - the screen never builds a backend URL of its own,
+    which is what keeps this module the only thing that knows where the backend
+    is.
+    """
+    try:
+        with _client() as client:
+            response = client.get(
+                f"/documents/{doc_id}/pages/{page}",
+                params={"chunk_id": chunk_id} if chunk_id else None,
+            )
+    except httpx.RequestError as error:
+        raise LensApiError("unreachable", f"could not reach the backend: {error}") from error
+    _raise(response)
+    return response.content
+
+
 def delete_document(doc_id: str) -> None:
     try:
         with _client() as client:

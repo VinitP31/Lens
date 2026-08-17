@@ -12,6 +12,8 @@ page before you open it.
 
 import streamlit as st
 
+from frontend import api_client
+
 # What the backend calls a chunk's type, and what a reader should see. A table or
 # a figure caption is read differently from a sentence, so the label is honest
 # about which one the answer leaned on.
@@ -53,10 +55,10 @@ def render(citations: list[dict], documents: list[dict], key_prefix: str) -> Non
 
             if removed:
                 st.caption(
-                    "This document is no longer in your library, so the page "
-                    "cannot be opened. The passage above is what the answer used."
+                    "This document is no longer in your library. The page can "
+                    "still be opened: the original file is kept so that answers "
+                    "given before it was removed stay checkable."
                 )
-                continue
 
             st.button(
                 f"View page {page}",
@@ -90,11 +92,18 @@ def page_dialog(citation: dict, documents: list[dict]) -> None:
     if section:
         st.caption(section.replace(" > ", " › "))
 
-    # The rendered page with its highlight arrives at stage 8, when the backend
-    # gains a route for it. Saying so is better than opening an empty frame: the
-    # passage and the page number below are already enough to find it by hand.
-    st.info("The page image is not built yet. Until it is, here is the exact passage used.")
+    try:
+        image = api_client.page_image(
+            citation["doc_id"], citation["page"], citation.get("chunk_id")
+        )
+    except api_client.LensApiError as error:
+        # The page could not be drawn - usually the original file is gone. The
+        # passage is still shown, because it is what the answer actually used and
+        # it is better than an empty frame.
+        st.warning(error.message)
+        if citation.get("snippet"):
+            st.markdown(f"> {citation['snippet']}")
+        return
 
-    if citation.get("snippet"):
-        st.markdown(f"> {citation['snippet']}")
-    st.caption(f"Passage {citation.get('chunk_id')}")
+    st.image(image, width="stretch")
+    st.caption("The highlighted region is the passage this answer used.")
