@@ -26,6 +26,12 @@ TRACE_DIR = DATA_DIR / "traces"
 QUERY_TRACE_PATH = TRACE_DIR / "queries.jsonl"
 DOCUMENT_TRACE_PATH = TRACE_DIR / "documents.jsonl"
 
+# Full output of the last failed check. The console shows only the tail, which was
+# enough until a test failed once, could not be reproduced, and its reason had
+# already scrolled past - leaving nothing to work from. Overwritten each run: the
+# interesting failure is the one that just happened.
+CHECK_LOG_PATH = DATA_DIR / "last-check.log"
+
 # Application state: the document registry, conversations and messages. One
 # local file, so a restart loses nothing and there is no server to run.
 DB_PATH = DATA_DIR / "lens.db"
