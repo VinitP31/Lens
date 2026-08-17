@@ -580,3 +580,67 @@ def test_a_healthy_library_starts(tmp_path, monkeypatch):
     check_stores_agree(db, object())
 
     db.close()
+
+
+# --- the cited page as an image ------------------------------------------
+# The feature the whole design exists for: stop taking the answer's word for it
+# and look at the page.
+
+
+def test_a_page_comes_back_as_a_png(client):
+    doc_id = upload(client).json()["doc_id"]
+
+    response = client.get(f"/documents/{doc_id}/pages/1")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_a_page_beyond_the_document_is_a_404(client):
+    doc_id = upload(client).json()["doc_id"]
+
+    response = client.get(f"/documents/{doc_id}/pages/99")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "page_not_found"
+
+
+def test_a_page_of_a_missing_document_is_a_404(client):
+    response = client.get("/documents/nope/pages/1")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "document_not_found"
+
+
+def test_a_removed_document_still_renders_its_pages(client):
+    """Its file and row are kept precisely so answers given before it was removed
+    stay checkable. Refusing here would break the citations the soft delete was
+    designed to protect."""
+    doc_id = upload(client).json()["doc_id"]
+    client.delete(f"/documents/{doc_id}")
+
+    response = client.get(f"/documents/{doc_id}/pages/1")
+
+    assert response.status_code == 200
+    assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_an_unknown_chunk_id_still_renders_the_page(client):
+    """Without coordinates the page renders plain. The page is still the source,
+    so showing it beats refusing."""
+    doc_id = upload(client).json()["doc_id"]
+
+    response = client.get(f"/documents/{doc_id}/pages/1", params={"chunk_id": "nope:99"})
+
+    assert response.status_code == 200
+
+
+def test_the_page_image_is_cacheable(client):
+    """The bytes are a pure function of the file, the page and the box, and none
+    of the three changes."""
+    doc_id = upload(client).json()["doc_id"]
+
+    response = client.get(f"/documents/{doc_id}/pages/1")
+
+    assert "max-age" in response.headers.get("cache-control", "")
