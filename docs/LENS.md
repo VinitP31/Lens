@@ -1325,7 +1325,7 @@ Failing at startup instead of running broken is deliberate. A backend that start
 def build_index(chunks, embed_fn):   # not: from openai import ...
 ```
 
-Tests supply a fake embedder, so the suite runs offline in about a second at zero cost. Without this, every test hits the API, the suite gets slow and expensive, and you stop running it — which is the same as not having it.
+Tests supply a fake embedder, so the suite runs offline at zero cost. Without this, every test hits the API, the suite gets slow and expensive, and you stop running it — which is the same as not having it. What time it does take is real work: extracting sample PDFs and opening a local store per test, about three minutes in total.
 
 ### What to write
 
