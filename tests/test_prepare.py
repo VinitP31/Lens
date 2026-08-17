@@ -6,6 +6,7 @@ at what actually got imported. Asserting it from inside the suite would prove
 nothing: by then another test module has already imported the extractor.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,14 +33,21 @@ def test_the_parent_process_never_loads_docling():
         "from backend.storage import vector_store;"
         "print([m for m in ('torch', 'docling', 'transformers') if m in sys.modules])"
     )
+    # An explicit path rather than relying on the working directory, and the
+    # error surfaced rather than swallowed: `check=True` raises a
+    # CalledProcessError that hides the child's stderr, which is the only thing
+    # that explains why the probe failed.
+    environment = {**os.environ, "PYTHONPATH": str(ROOT)}
     result = subprocess.run(  # noqa: S603 - fixed argument list, no shell
         [sys.executable, "-c", probe],
         cwd=ROOT,
         capture_output=True,
         text=True,
-        check=True,
+        env=environment,
+        check=False,
     )
 
+    assert result.returncode == 0, f"probe failed:\n{result.stderr[-2000:]}"
     assert result.stdout.strip().endswith("[]"), result.stdout
 
 
@@ -87,8 +95,14 @@ def test_a_missing_file_is_reported_rather_than_hanging(tmp_path):
 
 def test_a_worker_that_overruns_is_stopped(monkeypatch, simple_pdf):
     """A hung worker holds a Docling model and several hundred megabytes, so the
-    parent must give up on it rather than wait forever."""
+    parent must give up on it rather than wait forever.
+
+    The outcome is asserted, not the wording. At this timeout the parent stops the
+    child during the child's own startup, so two correct reports race: the
+    deadline passing, and the child being found already dead. Pinning either
+    message would make this test fail on a busy machine for no real reason.
+    """
     monkeypatch.setattr(settings, "EXTRACT_TIMEOUT_SECONDS", 0.01)
 
-    with pytest.raises(ExtractionFailedError, match="exceeded"):
+    with pytest.raises(ExtractionFailedError):
         prepare.prepare(simple_pdf, title="Simple")
