@@ -296,11 +296,13 @@ Doing this by hand means font-size heuristics for headings, rule-based table det
 
 | Area | Contains | Visible |
 |---|---|---|
-| Sidebar | New chat, chat history | Always |
+| Sidebar | New chat, chat history, delete a chat | Always |
 | Main area | Context indicator, messages, input, upload button, documents button | Always |
 | Documents drawer | Document list, upload, delete | Only when opened |
 
 The sidebar holds conversations only. Documents live in the drawer. Mixing them turns a chat app into a file manager.
+
+**Deleting a chat asks once.** The control sits beside the one that opens a chat, in a narrow column, so a stray click is likely and the loss is permanent — the messages and the citations stored on them go with it. One click arms it, a second carries it out, and opening any other chat calls it off. Only one chat is ever armed at a time, so there is never more than one row where a click destroys something. The confirmation says the documents are kept, because that is the thing a user would actually hesitate over.
 
 ### The library is the corpus
 
@@ -1191,6 +1193,10 @@ Everything below lives in `settings.py`.
 | `MILVUS_URI` | Local file or server address |
 | `DB_PATH`, `UPLOAD_DIR` | Local paths |
 | `TRACE_DIR`, `QUERY_TRACE_PATH`, `DOCUMENT_TRACE_PATH` | Append-only JSONL trace files |
+| `API_BASE_URL` | Where the UI reaches the backend. The UI never imports a backend module |
+| `API_TIMEOUT_SECONDS` | 120. An answer waits on a model, but a hung request must still end |
+| `API_UPLOAD_TIMEOUT_SECONDS` | 180. Validation reads the whole file before replying |
+| `STATUS_POLL_SECONDS` | 2. How often the screen asks how an upload is getting on |
 
 ### Secrets
 
