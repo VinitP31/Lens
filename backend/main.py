@@ -22,6 +22,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -34,6 +35,15 @@ from config import settings
 log = logging.getLogger(__name__)
 
 API_KEY_VARIABLE = "OPENAI_API_KEY"
+
+# The README tells a reader to put their key in `.env`, so the app has to read it.
+# Without this line it worked only because a dependency happened to load the file
+# on import, which is luck rather than behaviour, and it would break silently the
+# day that dependency stopped.
+#
+# Nothing already in the environment is overwritten: an exported variable is a
+# deliberate choice for this one run, and a file on disk must not beat it.
+load_dotenv(settings.PROJECT_ROOT / ".env", override=False)
 
 # Which failures are the caller's fault and which are ours. Anything not listed
 # is a 500, because an unmapped error is a surprise and a surprise is not a
