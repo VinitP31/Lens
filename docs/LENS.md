@@ -1048,6 +1048,8 @@ Diagnostics come back on every turn. They cost nothing and mean you never have t
 ```
 Lens/
 ├── README.md                      Cold-start instructions, tested from a clean clone
+├── backend/README.md              Backend setup, endpoints, error codes
+├── frontend/README.md             Frontend setup, screens, state rules
 ├── .env.example                   Every variable, placeholder values
 ├── .gitignore                     .env, .venv, data/
 ├── requirements.txt
@@ -1075,6 +1077,7 @@ Lens/
 │   │   ├── pipeline.py            Stage orchestration, status, rollback
 │   │   ├── validator.py           Hash, size, pages, encryption, duplicate
 │   │   ├── prepare.py             Runs extraction + chunking in a worker process
+│   │   ├── worker.py              Extraction as its own program
 │   │   ├── extractor.py           Docling, with provenance. Worker process only
 │   │   ├── ocr.py                 Conditional OCR and density check
 │   │   ├── chunker.py             Structure chunking, context headers
@@ -1135,9 +1138,10 @@ Lens/
 │   └── test_api.py
 │
 ├── scripts/
-│   ├── ingest_cli.py              Batch ingest without the UI
-│   ├── reset_store.py             Wipe all state
-│   └── profile_pdf.py             Report what the pipeline finds in a PDF
+│   ├── check.py                   Lint, format and tests in one command
+│   ├── profile_pdf.py             Report what the pipeline finds in a PDF
+│   ├── reset_store.py             Wipe all state, with a listing and a confirmation
+│   └── make_stress_pdfs.py        Rebuild the two stress PDFs
 │
 └── data/                          Runtime state, not committed
     ├── uploads/
