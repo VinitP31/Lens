@@ -157,3 +157,20 @@ class EmptyScopeError(LensError):
     """
 
     code = "empty_scope"
+
+
+class StoreMismatchError(LensError):
+    """The document registry and the vector store disagree about what exists.
+
+    Both are separate files and nothing forces them to stay in step. If one is
+    deleted, restored from a backup without the other, or half-written when a
+    disk filled up, the registry can list documents whose chunks are gone.
+
+    Every question then returns "not found in your documents" for a library that
+    visibly contains documents - no error, no warning, and no way for a user to
+    tell that from the app simply not working. So it is refused at startup
+    instead, which is the same choice made for a mismatched embedding model and
+    for the same reason.
+    """
+
+    code = "store_mismatch"
