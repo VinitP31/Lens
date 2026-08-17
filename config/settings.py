@@ -398,6 +398,25 @@ HISTORY_WINDOW_TURNS = 6
 # readable name rather than a truncated sentence.
 TITLE_MAX_CHARS = 60
 
+# --- Utility model -------------------------------------------------------
+# Mechanical work around the edges of a question: deciding what kind of message
+# it is, rewriting a follow-up so it stands alone, and shortening a very long
+# message before it is searched with. None of it produces an answer, so the
+# cheapest capable model does it.
+
+MODEL_UTILITY = "gpt-4o-mini"
+
+# Above this many characters a message is reduced to the question inside it
+# before being embedded. A long message spreads its meaning over far more text
+# than any chunk holds, so it ends up a weak match against everything rather
+# than a strong match against the right passage.
+CONDENSE_CHAR_THRESHOLD = 1500
+
+# One question is the whole output, so both of these are small on purpose. A cap
+# that is generous costs nothing when unused and bounds a runaway reply.
+CONDENSE_MAX_OUTPUT_TOKENS = 200
+ANALYZE_MAX_OUTPUT_TOKENS = 300
+
 # --- Generation ----------------------------------------------------------
 # The gate has already decided the question is worth answering by the time any
 # of this is used. What is left is to answer only from the passages given, cite
