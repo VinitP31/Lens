@@ -686,6 +686,20 @@ flowchart TB
 
 A very long message embeds badly — its meaning gets spread across far more text than any chunk contains, so it's similarly far from everything. Above 1,500 characters, one cheap LLM call reduces it to a focused question first. The UI says this is happening, so it isn't a silent change to the user's words.
 
+**Measured**, on eight rambling messages built around known-answer questions:
+
+| | as typed | condensed |
+|---|---|---|
+| Expected page retrieved | 7/8 | **8/8** |
+| Passed the gate | 7/8 | **8/8** |
+| Mean top score | 0.516 | **0.681** |
+
+Two things had to be fixed before that held.
+
+**Short, not merely shorter.** The first version produced accurate but winding questions, and a winding question scores worse than a direct one asking the same thing — one measured at 0.437 against 0.541 for the plain form, which is the difference between a refusal and an answer. The prompt now asks for one short question, as somebody would type into a search box.
+
+**A condensed question must not lose a number.** See [Rewrites may not drop a specific](#rewrites-may-not-drop-a-specific).
+
 ### Rewrite + intent, in one call
 
 Both need the same input — chat history plus the current message — so combining them halves latency and cost.
@@ -703,6 +717,18 @@ Both need the same input — chat history plus the current message — so combin
 Without this, saying "hi" goes through search, matches nothing, and gets answered with *"I couldn't find that in your documents."* Correct by the system's own logic, obviously wrong to a human.
 
 Conversations are never titled from a greeting. Titling waits for the first real question.
+
+### Rewrites may not drop a specific
+
+Both the condenser and the rewrite restate a question, and both fail the same way: they drop the number that mattered.
+
+Measured on this corpus. A message saying *"points allocated across categories, with 100 points in total"* was rewritten to *"what is the scoring allocation across categories?"*. The passage holding the actual figures then fell out of the results entirely — the question retrieved the topic instead of the fact, and the answer became an honest refusal to something the documents answer.
+
+Instructions alone did not fix it. Telling the model to keep every detail helped and still failed once chat history was in the prompt.
+
+So it is decided in code, not in language: every number and code in the original is compared against the rewrite, and **a rewrite that lost one is discarded** and the original searched with instead. This is the project's one rule applied where it belongs — the model handles language, code handles the decision that has to be right.
+
+Only losses are checked. A rewrite that *adds* a number is forbidden by the prompt, and is a different failure.
 
 **Context changes get marked in history.** If a chat discusses one document, then switches context, then gets a bare follow-up, the rewrite would build a question about the old subject and search it in the new documents. A marker in the history record prevents that.
 
@@ -732,6 +758,8 @@ Prompt order, fixed:
 **Stable parts first.** Providers discount repeated prompt prefixes heavily, and matching needs an exact prefix. Putting fixed instructions before variable chunks makes that discount available for free.
 
 **Temperature 0.** Retrieval is fully deterministic, so identical input retrieves identical chunks. Generation at 0 is nearly deterministic but not byte-identical, because of batching and floating-point behaviour in hosted inference. The honest claim is *same substance and same citations*, not *same bytes*.
+
+**The marker can appear anywhere in a reply, and never reaches the user.** A two-part question can be answerable in one part and not the other, and the model then answers what it can and appends the marker for the rest. Checking only the start of a reply let that through, and the literal word was shown at the end of an otherwise good answer. It is now removed wherever it appears — including mid-stream, where the last few characters are held back in case they are the beginning of it. What remains decides the outcome: nothing left is a refusal, anything left is an answer. A reply that carried the marker alongside real content is recorded as partly answered.
 
 **Abstention is an exact string, not prose.** The model replies with `ABSTENTION_MARKER` and nothing else. Code has to recognise a refusal reliably, and matching on wording would read a model that says *"I could not find"* rather than *"I cannot find"* as a real answer — the one misreading that turns an honest refusal into a confident one.
 
@@ -1145,6 +1173,9 @@ Everything below lives in `settings.py`.
 | `ABSTENTION_MARKER` | `NOT_IN_DOCUMENTS` | Recognised by code, so it is a fixed token rather than a sentence |
 | `CITATION_SNIPPET_CHARS` | 300 | How much of a cited passage is stored for display. The page view is where the whole passage is read |
 | `CONDENSE_CHAR_THRESHOLD` | 1500 | Above this, condense before embedding |
+| `CONDENSE_MAX_OUTPUT_TOKENS` | 200 | One question is the whole output |
+| `ANALYZE_MAX_OUTPUT_TOKENS` | 300 | Intent plus one rewritten question |
+| `TITLE_MAX_CHARS` | 60 | Automatic chat title, cut at a word boundary |
 | `HISTORY_WINDOW_TURNS` | 6 | Turns of chat history passed to the rewrite call. Uncapped history grows the prompt without limit, and very old turns start misleading the rewrite |
 | `MAX_RETRIES` | 3 | Uncapped retries are a runaway bill |
 
@@ -1386,7 +1417,7 @@ Listed on purpose. A system with documented weaknesses is more trustworthy than 
 | Rare exact identifiers retrieve badly | Averaged vectors under-weight rare tokens | Questions about a specific form or code may refuse | Hybrid keyword + semantic search |
 | Content only inside images is unreachable | No vision model | Answers about diagram-only content are incomplete, not wrong | Vision captioning |
 | Tables across page breaks fragment | Table detection works per page | Multi-page tables may split | Cross-page stitching |
-| Broad questions may be incomplete | Fixed 5 chunks sent to the LLM | Partial answers on questions needing wide synthesis | More context, or summarisation |
+| Broad questions may be incomplete | Fixed 5 chunks sent to the LLM | Partial answers on questions needing wide synthesis. Measured example: a three-part weighting stated across three separate passages answers completely when asked directly, and returns two of the three when reached through a long rambling message, because only two passages make the top five | More context, or summarisation |
 | Non-English questions refuse | English-only embeddings | Honest refusal, not a wrong answer | Multilingual embeddings |
 | Cross-references aren't followed | A chunk citing another section doesn't pull it in | Questions spanning a section and the one it references may be partial | Reference resolution at retrieval time |
 | Unlabelled contents pages still index | Exclusion relies on Docling's element label | An unlabelled contents page can occupy a retrieval slot | Conservative typographic detection |
@@ -1535,6 +1566,9 @@ A label and a bare value set apart on the page arrive as two elements, and the p
 
 **D-29 · Abstention is an exact marker, and an ungrounded answer becomes one.**
 The model replies with a fixed token rather than prose, because code has to recognise a refusal and matching on wording would read a rephrased refusal as an answer. Separately, an answer whose every citation was invented is reported as an abstention rather than shown without sources: nothing in it can be checked, which is precisely the state this system exists to avoid. A provider outage is neither, and raises. *Rejected:* detecting refusal from prose; showing an uncited answer with a warning; returning an outage as an abstention. *Costs:* the model must follow one exact instruction, which the Stage 5 measurement checks rather than assumes — 13 of 13 unanswerable questions that reached it were refused, and no citation was invented.
+
+**D-30 · A rewrite that loses a specific is discarded in code.**
+The condenser and the rewrite both restate a question, and both were measured dropping the number that found the answer — retrieving the topic instead of the fact and turning an answerable question into an honest refusal. Prompt instructions reduced it without removing it, and failed again once history was in the prompt. Numbers and codes in the original are therefore compared against the rewrite, and a rewrite that lost one is thrown away. *Rejected:* stronger wording alone, which was tried and measured insufficient; trusting the model on something that is not a language decision. *Costs:* a question whose rewrite legitimately drops a number is searched in its longer original form, which is the safe direction.
 
 ---
 
