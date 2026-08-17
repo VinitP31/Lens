@@ -14,6 +14,22 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from config import settings
+
+
+@pytest.fixture(autouse=True)
+def _traces_go_to_a_temporary_directory(tmp_path, monkeypatch):
+    """Keep the trace log out of the real data directory.
+
+    Every test that ingests or answers writes a trace, and without this the
+    suite appends hundreds of lines of fixture noise to the file a person reads
+    when they want to know why a real answer looked the way it did.
+    """
+    monkeypatch.setattr(settings, "TRACE_DIR", tmp_path / "traces")
+    monkeypatch.setattr(settings, "QUERY_TRACE_PATH", tmp_path / "traces" / "queries.jsonl")
+    monkeypatch.setattr(settings, "DOCUMENT_TRACE_PATH", tmp_path / "traces" / "documents.jsonl")
+
+
 # Text placed on each page of the simple fixture. Index 0 is page 1.
 #
 # Each body is deliberately several hundred characters long. A real document runs
