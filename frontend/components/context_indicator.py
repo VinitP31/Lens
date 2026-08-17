@@ -70,7 +70,7 @@ def render(conversation: dict | None, documents: list[dict]) -> None:
     save, widen = st.columns([1, 1])
 
     with save:
-        if st.button("Save selection", use_container_width=True):
+        if st.button("Save selection", width="stretch"):
             if not chosen:
                 # Refused rather than saved. An empty selection makes every
                 # question abstain, which reads as the app being broken rather
@@ -83,7 +83,7 @@ def render(conversation: dict | None, documents: list[dict]) -> None:
                 _apply(conversation, SUBSET, chosen)
 
     with widen:
-        if st.button("Search everything", use_container_width=True):
+        if st.button("Search everything", width="stretch"):
             _apply(conversation, LIBRARY, None)
 
 

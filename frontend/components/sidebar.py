@@ -28,7 +28,7 @@ def render() -> None:
     with st.sidebar:
         st.markdown("### Lens")
 
-        if st.button("New chat", use_container_width=True):
+        if st.button("New chat", width="stretch"):
             # No conversation is created here. An empty chat with no messages is
             # a row nobody asked for; it is created when the first question is
             # actually asked.
@@ -68,7 +68,7 @@ def render() -> None:
                 st.button(
                     label,
                     key=f"conv-{conv_id}",
-                    use_container_width=True,
+                    width="stretch",
                     type="primary" if conv_id == current else "secondary",
                     on_click=_open,
                     args=(conv_id,),
@@ -78,7 +78,7 @@ def render() -> None:
                     "×",
                     key=f"arm-{conv_id}",
                     help="Delete this chat",
-                    use_container_width=True,
+                    width="stretch",
                     on_click=_arm,
                     args=(conv_id,),
                 )
@@ -98,7 +98,7 @@ def _render_confirm(chat: dict) -> None:
         st.button(
             "Delete",
             key=f"del-{chat['conv_id']}",
-            use_container_width=True,
+            width="stretch",
             type="primary",
             on_click=_delete,
             args=(chat["conv_id"],),
@@ -107,7 +107,7 @@ def _render_confirm(chat: dict) -> None:
         st.button(
             "Keep",
             key=f"keep-{chat['conv_id']}",
-            use_container_width=True,
+            width="stretch",
             on_click=_disarm,
         )
 

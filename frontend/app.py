@@ -63,10 +63,10 @@ def main() -> None:
 
     left, right = st.columns([1, 1])
     with left:
-        if st.button("Documents", use_container_width=True):
+        if st.button("Documents", width="stretch"):
             documents_drawer.open_drawer(documents)
     with right:
-        if st.button("New chat", use_container_width=True):
+        if st.button("New chat", width="stretch"):
             st.session_state[state.CURRENT_CONV] = None
             st.rerun()
 

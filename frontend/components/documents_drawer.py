@@ -30,7 +30,7 @@ def open_drawer(documents: list[dict]) -> None:
             pages = document.get("page_count") or "?"
             st.caption(f"{pages} pages · {document.get('chunk_count', 0)} passages")
         with remove:
-            if st.button("Remove", key=f"rm-{document['doc_id']}", use_container_width=True):
+            if st.button("Remove", key=f"rm-{document['doc_id']}", width="stretch"):
                 _remove(document)
 
     st.divider()
