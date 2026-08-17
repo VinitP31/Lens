@@ -20,8 +20,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from config import settings  # noqa: E402
+
 PASS = "  ok  "
 FAIL = " FAIL "
+
+
+def _log_failure(label: str, output: str) -> Path | None:
+    """Keep the whole output of a failed check, and say where it went.
+
+    The console shows the tail only, which is usually all anyone reads. It was not
+    enough once: a test failed, would not reproduce afterwards, and the lines
+    explaining it had already scrolled off - so there was nothing left to diagnose
+    from. The full text now survives on disk whether or not anyone looks at it.
+
+    Never raises. A check that cannot write its log has still produced a result,
+    and losing the result to a logging error would be the worse failure.
+    """
+    try:
+        settings.CHECK_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        settings.CHECK_LOG_PATH.write_text(f"=== {label} ===\n{output}\n")
+        return settings.CHECK_LOG_PATH
+    except OSError:
+        return None
 
 
 def _run(label: str, command: list[str]) -> bool:
@@ -32,6 +53,9 @@ def _run(label: str, command: list[str]) -> bool:
     if not ok:
         output = (result.stdout + result.stderr).strip()
         print("\n".join(f"         {line}" for line in output.splitlines()[-25:]))
+        written = _log_failure(label, output)
+        if written:
+            print(f"         full output: {written}")
     return ok
 
 
@@ -49,8 +73,9 @@ def fast_checks() -> bool:
 def corpus_audit(sample_dir: Path) -> bool:
     """Check the invariants that only real documents can break."""
     logging.disable(logging.WARNING)
+    # Imported here rather than at module scope: this pulls in Docling, which the
+    # fast checks must not pay for.
     from backend.ingestion import chunker, extractor
-    from config import settings
 
     # stress_* files are held outside the corpus on purpose: they are run through
     # profile_pdf.py by hand, never indexed, and would fail these invariants by
