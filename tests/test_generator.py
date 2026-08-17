@@ -270,3 +270,81 @@ def test_no_text_is_lost_when_tokens_arrive_one_character_at_a_time(reply):
 
     assert text == reply
     assert not final.abstained
+
+
+# --- a half-answerable question ------------------------------------------
+# A question with two parts can be answerable in one part and not the other.
+# The model then answers what it can and marks the rest, putting the marker in
+# the middle of a reply rather than at the start. Measured on the real corpus,
+# not imagined - and the first version of this code showed the raw marker to the
+# user at the end of an otherwise good answer.
+
+
+HALF = "Fees are 30 points [1].\n\nNOT_IN_DOCUMENTS"
+
+
+def test_a_marker_after_an_answer_never_reaches_the_user():
+    result = generator.generate("two questions", [hit()], NAMES, chat=replying(HALF))
+
+    assert settings.ABSTENTION_MARKER not in result.text
+    assert result.text.startswith("Fees are 30 points [1].")
+
+
+def test_a_half_answerable_question_still_counts_as_an_answer():
+    result = generator.generate("two questions", [hit()], NAMES, chat=replying(HALF))
+
+    assert not result.abstained
+    assert [c.number for c in result.citations] == [1]
+
+
+def test_a_half_answerable_question_is_recorded_as_partly_absent():
+    """Not a failure, but a rate that climbs means questions are arriving with
+    more parts than the retrieved passages cover."""
+    result = generator.generate("two questions", [hit()], NAMES, chat=replying(HALF))
+
+    assert result.partly_absent
+
+
+def test_an_ordinary_answer_is_not_marked_partly_absent():
+    result = generator.generate("a question", [hit()], NAMES, chat=replying("Yes [1]."))
+
+    assert not result.partly_absent
+
+
+def test_a_reply_that_is_only_a_marker_with_whitespace_is_an_abstention():
+    result = generator.generate(
+        "a question", [hit()], NAMES, chat=replying(f"\n\n{settings.ABSTENTION_MARKER}\n")
+    )
+
+    assert result.abstained
+    assert result.reason == generator.REASON_NOT_IN_DOCUMENTS
+
+
+def test_the_marker_is_never_streamed_even_in_the_middle_of_an_answer():
+    text, final = _drain(generator.stream("two questions", [hit()], NAMES, chat=replying(HALF)))
+
+    assert settings.ABSTENTION_MARKER not in text
+    assert "Fees are 30 points [1]." in text
+    assert not final.abstained
+    assert final.partly_absent
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        HALF,
+        "Fees are 30 points [1]. NOT_IN_DOCUMENTS for the rest.",
+        "NOT_IN_DOCUMENTS",
+        "Nothing was found [1]. NOT",
+    ],
+)
+def test_streaming_one_character_at_a_time_never_leaks_the_marker(reply):
+    """Real providers stream a character or two at a time, which is exactly the
+    case a naive prefix check gets wrong."""
+
+    def one_character(_messages):
+        yield from reply
+
+    text, _final = _drain(generator.stream("q", [hit()], NAMES, chat=one_character))
+
+    assert settings.ABSTENTION_MARKER not in text
