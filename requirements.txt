@@ -25,7 +25,7 @@ pymupdf==1.28.2
 pymilvus[milvus_lite]==3.0.1
 
 # UI
-streamlit
+streamlit==1.61.1
 requests==2.34.2
 
 # Utilities

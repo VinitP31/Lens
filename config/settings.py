@@ -391,6 +391,22 @@ OCR_TRIGGER_CHARS_PER_PAGE = 150
 # rejected rather than indexed as near-empty chunks.
 MIN_CHARS_PER_PAGE = 150
 
+# --- Frontend to backend -------------------------------------------------
+# The UI is a separate process and reaches the backend over HTTP only. Named here
+# so there is one place to change it and no literal in the client.
+
+API_BASE_URL = "http://127.0.0.1:8000"
+
+# An answer waits on a model, so this is generous. A hung request still has to
+# end rather than leaving the screen spinning forever.
+API_TIMEOUT_SECONDS = 120.0
+
+# Uploading reads the whole file and validates it before replying.
+API_UPLOAD_TIMEOUT_SECONDS = 180.0
+
+# How often the screen asks how an upload is getting on.
+STATUS_POLL_SECONDS = 2.0
+
 # --- Conversations -------------------------------------------------------
 # Chat state lives in SQLite because Streamlit wipes its own session state on
 # every refresh.
