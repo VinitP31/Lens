@@ -25,6 +25,7 @@ nothing.
 """
 
 import os
+import re
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -47,6 +48,34 @@ REASON_NO_VALID_CITATIONS = "no_valid_citations"
 REASON_EMPTY_ANSWER = "empty_answer"
 
 
+def strip_marker(reply: str) -> tuple[str, bool]:
+    """Remove the abstention marker from a reply, wherever it appears.
+
+    The prompt asks for the marker alone and nothing else, and usually gets it.
+    But a question with two parts can be half answerable, and then the model
+    answers the half it can and appends the marker for the rest - measured on
+    this corpus, not imagined.
+
+    Checking only the start of the reply let that through, and the user was shown
+    the literal word NOT_IN_DOCUMENTS at the end of an otherwise good answer.
+    Cleaning it here means the marker is a signal between the prompt and the
+    code, which is what it was always meant to be, rather than something a user
+    can ever read.
+
+    Returns the cleaned text and whether the marker was present, so a partly
+    answerable question is visible in diagnostics instead of looking like an
+    ordinary answer.
+    """
+    if settings.ABSTENTION_MARKER not in reply:
+        return reply.strip(), False
+    cleaned = reply.replace(settings.ABSTENTION_MARKER, " ")
+    # Removing it mid-text leaves the gap it sat in, so blank lines and runs of
+    # spaces are closed up rather than shown.
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n\s*\n\s*\n+", "\n\n", cleaned)
+    return cleaned.strip(), True
+
+
 @dataclass(frozen=True)
 class Answer:
     """One answer, and everything needed to show, check and explain it."""
@@ -61,6 +90,11 @@ class Answer:
     # first sign the prompt's citation contract has stopped holding.
     fabricated: list[int] = field(default_factory=list)
     prompt_passages: int = 0
+    # The model answered part of the question and reported the rest as absent.
+    # Not a failure - a two-part question can be half answerable - but worth
+    # recording, because a rate that climbs means questions are routinely
+    # arriving with more parts than the retrieved passages cover.
+    partly_absent: bool = False
 
 
 def openai_chat() -> ChatFunction:
@@ -175,13 +209,14 @@ def generate(
     if not reply:
         return _abstention(REASON_EMPTY_ANSWER, [], len(hits))
 
-    # Checked on the stripped reply rather than by equality. A model that adds a
-    # trailing full stop to the marker still means it, and reading that as an
-    # answer would show the marker itself to the user as though it were one.
-    if reply.startswith(settings.ABSTENTION_MARKER):
+    # The marker is removed wherever it appears, not only from the start. What
+    # remains decides the outcome: nothing left means the model refused, and
+    # anything left is an answer it could give.
+    answer_text, marker_seen = strip_marker(reply)
+    if not answer_text:
         return _abstention(REASON_NOT_IN_DOCUMENTS, [], len(hits))
 
-    validated = citations.validate(reply, hits, names)
+    validated = citations.validate(answer_text, hits, names)
 
     # An answer whose every citation was invented cannot be checked against
     # anything, which is exactly the state this system exists to avoid. It is
@@ -190,11 +225,12 @@ def generate(
         return _abstention(REASON_NO_VALID_CITATIONS, validated.fabricated, len(hits))
 
     return Answer(
-        text=reply,
+        text=answer_text,
         citations=validated.citations,
         abstained=False,
         fabricated=validated.fabricated,
         prompt_passages=len(hits),
+        partly_absent=marker_seen,
     )
 
 
@@ -206,55 +242,80 @@ def stream(
 ) -> Iterator[str | Answer]:
     """The same answer, yielding text as it arrives and the `Answer` last.
 
-    Streaming exists so text appears immediately, but citations cannot be
-    resolved until the reply is complete, and an abstention must not be streamed
-    at all - a user would watch `NOT_IN_DOCUMENTS` type itself out.
+    Streaming exists so text appears immediately, but the abstention marker must
+    never reach the screen - a user would watch NOT_IN_DOCUMENTS type itself out,
+    or find it appended to an otherwise good answer.
 
-    So tokens are held back until enough has arrived to rule out an abstention,
-    then released. The marker is the first thing in the reply when it is used, so
-    the delay is the length of one word rather than the whole answer.
+    So text is released with a short delay: everything except the last few
+    characters, which are held because they might be the beginning of the marker.
+    The delay is the length of one word, not the length of the answer.
+
+    The marker can appear anywhere, not only at the start. A question with two
+    parts can be half answerable, and then the model answers the half it can and
+    marks the rest - so the whole stream is filtered, not just its opening.
     """
     chat = chat or openai_chat()
     messages = prompt.assemble(question, hits, names)
+    marker = settings.ABSTENTION_MARKER
 
-    pieces: list[str] = []
-    releasing = False
+    collected: list[str] = []
+    pending = ""
+    emitted = False
+    marker_seen = False
+
+    def split(text: str) -> tuple[str, str, bool]:
+        """Divide text into what is safe to show now and what must wait.
+
+        A complete marker is removed. A few trailing characters are held back
+        when they could still turn into one, so the marker is never shown and
+        then regretted.
+        """
+        seen = marker in text
+        if seen:
+            text = text.replace(marker, " ")
+        for keep in range(min(len(marker) - 1, len(text)), 0, -1):
+            if marker.startswith(text[-keep:]):
+                return text[: len(text) - keep], text[len(text) - keep :], seen
+        return text, "", seen
+
     try:
         for piece in chat(messages):
-            pieces.append(piece)
-            if releasing:
-                yield piece
-                continue
-            sofar = "".join(pieces).lstrip()
-            # Still short enough to be the start of the marker: keep holding.
-            if settings.ABSTENTION_MARKER.startswith(sofar[: len(settings.ABSTENTION_MARKER)]):
-                if sofar.startswith(settings.ABSTENTION_MARKER):
-                    break
-                continue
-            releasing = True
-            yield sofar
+            collected.append(piece)
+            safe, pending, seen = split(pending + piece)
+            marker_seen = marker_seen or seen
+            # Whitespace left behind by a removed marker is not worth showing
+            # before any real text has been shown.
+            if safe and (safe.strip() or emitted):
+                emitted = True
+                yield safe
     except Exception as error:  # noqa: BLE001 - re-raised as a typed error
         if isinstance(error, GenerationFailedError):
             raise
         raise GenerationFailedError(f"generation failed mid-stream: {error}") from error
 
-    reply = "".join(pieces).strip()
-    if not reply:
-        yield _abstention(REASON_EMPTY_ANSWER, [], len(hits))
-        return
-    if reply.startswith(settings.ABSTENTION_MARKER):
-        yield _abstention(REASON_NOT_IN_DOCUMENTS, [], len(hits))
+    # Nothing further is coming, so what is still held cannot become a marker.
+    if pending and (pending.strip() or emitted):
+        yield pending
+
+    answer_text, seen_in_full = strip_marker("".join(collected))
+    marker_seen = marker_seen or seen_in_full
+
+    if not answer_text:
+        yield _abstention(
+            REASON_NOT_IN_DOCUMENTS if marker_seen else REASON_EMPTY_ANSWER, [], len(hits)
+        )
         return
 
-    validated = citations.validate(reply, hits, names)
+    validated = citations.validate(answer_text, hits, names)
     if not validated.grounded:
         yield _abstention(REASON_NO_VALID_CITATIONS, validated.fabricated, len(hits))
         return
 
     yield Answer(
-        text=reply,
+        text=answer_text,
         citations=validated.citations,
         abstained=False,
         fabricated=validated.fabricated,
         prompt_passages=len(hits),
+        partly_absent=marker_seen,
     )
