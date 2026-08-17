@@ -13,10 +13,12 @@ that was knowable immediately.
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile
+from fastapi.responses import Response
 
 from backend.api.schemas import DocumentSummary, IngestStatus, UploadAccepted
 from backend.ingestion import pipeline
-from backend.storage import registry
+from backend.rendering import page_renderer
+from backend.storage import registry, vector_store
 
 log = logging.getLogger(__name__)
 
@@ -127,3 +129,41 @@ async def delete(request: Request, doc_id: str) -> None:
     onward.
     """
     registry.soft_delete(request.app.state.db, doc_id)
+
+
+@router.get(
+    "/{doc_id}/pages/{page}",
+    responses={200: {"content": {"image/png": {}}}},
+    response_class=Response,
+)
+async def page_image(
+    request: Request, doc_id: str, page: int, chunk_id: str | None = None
+) -> Response:
+    """The page as a PNG, with the cited region highlighted.
+
+    `chunk_id` is optional: without it the page renders plain, which is what a
+    reader wants when following a citation whose coordinates were never captured.
+
+    A soft-deleted document still renders. Its file and row are kept precisely so
+    that answers given before it was removed remain checkable - refusing here
+    would break exactly the old citations the soft delete was designed to
+    protect.
+
+    Cached for a day. The bytes are a pure function of the file, the page and the
+    box, and none of the three changes.
+    """
+    db = request.app.state.db
+    document = registry.get(db, doc_id, include_deleted=True)
+
+    boxes = None
+    if chunk_id:
+        chunk = vector_store.get_chunk(request.app.state.store, chunk_id)
+        if chunk:
+            boxes = chunk.get("bboxes") or None
+
+    image = page_renderer.render(document.file_path, page, boxes)
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )

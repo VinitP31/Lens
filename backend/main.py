@@ -54,6 +54,8 @@ STATUS_BY_CODE = {
     "extraction_failed": 422,
     "vector_store_error": 503,
     "store_mismatch": 503,
+    "page_not_found": 404,
+    "render_failed": 422,
 }
 
 
