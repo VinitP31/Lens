@@ -226,6 +226,63 @@ def imageonly_pdf(tmp_path_factory) -> Path:
     return _write_pdf(tmp_path_factory.mktemp("pdfs") / "imageonly.pdf", build)
 
 
+# What the scanned fixture says, so a test can assert OCR recovered the words
+# rather than merely producing some characters.
+SCANNED_LINES = [
+    "All personnel entering the cold store must wear",
+    "insulated gloves and a high-visibility jacket.",
+    "The maximum continuous working period inside",
+    "the cold store is forty-five minutes.",
+]
+
+
+def _as_image_page(document, draw) -> None:
+    """Add a page that is a picture of whatever `draw` puts on it.
+
+    The text is drawn on a scratch page, rendered to a bitmap, and the bitmap
+    becomes the real page - so what survives is pixels and nothing else. This is
+    what a photocopier or a phone camera produces, and it is the only honest way
+    to test the OCR path.
+    """
+    scratch = pymupdf.open()
+    temporary = scratch.new_page(width=612, height=792)
+    draw(temporary)
+    image = temporary.get_pixmap(dpi=110).tobytes("jpeg", jpg_quality=70)
+    scratch.close()
+
+    page = document.new_page(width=612, height=792)
+    page.insert_image(page.rect, stream=image)
+
+
+@pytest.fixture(scope="session")
+def scanned_pdf(tmp_path_factory) -> Path:
+    """A page of readable text with no text layer at all."""
+
+    def build(doc):
+        def draw(page):
+            y = 96
+            for line in SCANNED_LINES:
+                page.insert_text((72, y), line, fontsize=13)
+                y += 26
+
+        _as_image_page(doc, draw)
+
+    return _write_pdf(tmp_path_factory.mktemp("pdfs") / "scanned.pdf", build)
+
+
+@pytest.fixture(scope="session")
+def blank_scan_pdf(tmp_path_factory) -> Path:
+    """A scan with nothing on it. OCR has nothing to recover."""
+
+    def build(doc):
+        _as_image_page(
+            doc,
+            lambda page: page.draw_rect(pymupdf.Rect(50, 50, 560, 740), fill=(0.97, 0.97, 0.97)),
+        )
+
+    return _write_pdf(tmp_path_factory.mktemp("pdfs") / "blank_scan.pdf", build)
+
+
 @pytest.fixture(scope="session")
 def corrupt_pdf(tmp_path_factory) -> Path:
     """A file that is not a PDF at all, despite the extension."""
