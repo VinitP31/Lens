@@ -1,16 +1,11 @@
 """Extraction and chunking, run in a program of their own.
 
 Docling and Milvus Lite each bundle their own copy of the OpenMP runtime, and a
-process that initialises both aborts - `OMP: Error #15`, or a segfault, with no
-traceback. It only bites once the vector index has been loaded, so an empty
-library ingests happily and every run after that dies.
+process that initialises both aborts. It only bites once the vector index has been
+loaded, so an empty library ingests happily and every run after that dies.
 
 A subprocess rather than a multiprocessing child: a child inherits the parent's
 descriptors, and the parent holds a live gRPC connection to the vector store.
-Measured, that child dies with SIGTRAP and an empty stderr.
-
-`Prepared` and `Chunk` are plain dataclasses over built-in types, so they cross
-the process boundary without either side needing the other's libraries.
 """
 
 import logging
@@ -103,6 +98,12 @@ def _attempt(pdf_path: Path, title: str) -> Prepared:
                 env={
                     "PYTHONPATH": str(ROOT),
                     "PATH": _path_for_worker(),
+                    # The parent holds a live gRPC connection to the vector store,
+                    # and gRPC's fork handlers run in the child between fork and
+                    # exec. Measured, that child sometimes dies and sometimes
+                    # wedges until the timeout. It re-execs immediately and has no
+                    # use for the parent's gRPC state.
+                    "GRPC_ENABLE_FORK_SUPPORT": "0",
                     # Docling reads these; passing them through keeps the worker's
                     # model cache where the rest of the system expects it.
                     **{
