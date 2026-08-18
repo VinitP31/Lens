@@ -423,6 +423,15 @@ HIGHLIGHT_BORDER_WIDTH = 0.8
 # a highlight rather than as an underline.
 HIGHLIGHT_PADDING = 1.5
 
+# Height of the two panes, in pixels: the message thread, and the cited page
+# beside it. One value, so the two line up.
+#
+# Both are fixed frames that scroll inside themselves, and the window does not
+# scroll at all. Left to grow, the thread pushed the page panel down the screen
+# and every answer moved the whole page under the reader - a question half in
+# view, an answer half out of it. A frame stays where it was put.
+PANEL_HEIGHT = 720
+
 # --- Frontend to backend -------------------------------------------------
 # The UI is a separate process and reaches the backend over HTTP only. Named here
 # so there is one place to change it and no literal in the client.

@@ -15,7 +15,7 @@ import re
 import streamlit as st
 
 from config import settings
-from frontend import api_client
+from frontend import api_client, state
 
 # Written by the backend on its own line when a table had rows left over.
 TRUNCATED_MARK = settings.SNIPPET_TRUNCATED_MARK
@@ -66,8 +66,11 @@ def render(citations: list[dict], documents: list[dict], key_prefix: str) -> Non
                     "given before it was removed stay checkable."
                 )
 
+            # Always offered, even when this source's page is the one already
+            # beside the answer. Closing the panel otherwise left no way back to
+            # it, which made "Close" a decision rather than a convenience.
             st.button(
-                f"View page {page}",
+                f"Show page {page}",
                 key=f"{key_prefix}-view-{citation.get('n')}-{citation.get('chunk_id')}",
                 on_click=_open_page,
                 args=(citation,),
@@ -142,25 +145,73 @@ def _row(cells: list[str]) -> str:
     return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
 
 
+def cited_page(conversation: dict | None) -> dict | None:
+    """The page to show beside the thread, or None when there is none to show.
+
+    Chosen by the answer rather than by a click. A grounded answer names its
+    source, and the point of the product is checking the claim against it, so the
+    page is simply there.
+
+    Only the newest answer counts. A greeting, a question about the app and a
+    refusal all cite nothing, and each must leave the panel closed: showing the
+    page from three turns ago beside "I couldn't find this in your documents"
+    would suggest a source the answer never had.
+    """
+    if not conversation:
+        return None
+
+    automatic = None
+    for message in reversed(conversation.get("messages", [])):
+        if message.get("role") != "assistant":
+            continue
+        sources = message.get("citations") or []
+        automatic = sources[0] if sources else None
+        break
+
+    if automatic is None:
+        return None
+
+    # The reader's own choice wins, but only over the answer it was made about.
+    # Once a new answer arrives it cites something else, and holding the old page
+    # open beside it would be showing the wrong evidence.
+    anchor = automatic.get("chunk_id")
+    if st.session_state.get(state.PAGE_ANCHOR) != anchor:
+        st.session_state[state.PAGE_ANCHOR] = anchor
+        st.session_state[state.PAGE_VIEW] = None
+        st.session_state[state.PAGE_CLOSED] = None
+
+    chosen = st.session_state.get(state.PAGE_VIEW)
+    if chosen:
+        return chosen
+    if st.session_state.get(state.PAGE_CLOSED) == anchor:
+        return None
+    return automatic
+
+
 def _open_page(citation: dict) -> None:
-    """Open the page viewer.
+    """Show a different source's page than the one the answer opened."""
+    st.session_state[state.PAGE_VIEW] = citation
+    st.session_state[state.PAGE_CLOSED] = None
 
-    The rendered page with its highlight is stage 8 work. Until the backend can
-    produce it, the honest thing is to say so rather than open an empty dialog -
-    the passage and the page number are already on screen above.
+
+def close_page() -> None:
+    """Hide the panel for this answer. The next answer opens its own."""
+    st.session_state[state.PAGE_VIEW] = None
+    st.session_state[state.PAGE_CLOSED] = st.session_state.get(state.PAGE_ANCHOR)
+
+
+def page_panel(citation: dict) -> None:
+    """Show the cited page beside the answer rather than on top of it.
+
+    A dialog covered the answer it was meant to support, so checking a citation
+    meant reading the page, closing it, and trusting memory for what the answer
+    had said. Side by side, the claim and its evidence are legible at the same
+    time, which is the entire point of the product.
+
+    It stays open while reading continues: opening another source swaps the page,
+    and only the close button dismisses it.
     """
-    st.session_state["page_view"] = citation
-
-
-@st.dialog("Source page", width="large")
-def page_dialog(citation: dict, documents: list[dict]) -> None:
-    """Show the cited page.
-
-    Kept in this module because it is part of checking a citation, not a separate
-    feature. It draws whatever the backend can give it: once page rendering
-    exists, the image with its highlight; until then, the passage and where it
-    sits.
-    """
+    st.button("Close", key="close-page", on_click=close_page)
     st.markdown(f"**{citation.get('display_name')}** — page {citation.get('page')}")
     section = citation.get("section_path")
     if section:
@@ -179,5 +230,10 @@ def page_dialog(citation: dict, documents: list[dict]) -> None:
             st.markdown(f"> {citation['snippet']}")
         return
 
-    st.image(image, width="stretch")
+    # A fixed frame the width of its column: the page fills it and scrolls, so a
+    # tall page never stretches the screen and the answer stays beside it.
+    with st.container(height=settings.PANEL_HEIGHT, border=False):
+        st.image(image, width="stretch")
+
+    # One line, kept: without it the yellow box on the page is unexplained.
     st.caption("The highlighted region is the passage this answer used.")

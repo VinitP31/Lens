@@ -23,6 +23,11 @@ from frontend import api_client, state
 ARMED = state.DELETE_ARMED
 
 
+# Longest chat title kept on the button. The sidebar is narrow and the delete
+# control sits beside it, so anything longer wraps.
+LABEL_MAX_CHARS = 26
+
+
 def render() -> None:
     """Draw the sidebar. Selecting a chat reruns the script with it open."""
     with st.sidebar:
@@ -32,7 +37,7 @@ def render() -> None:
             # No conversation is created here. An empty chat with no messages is
             # a row nobody asked for; it is created when the first question is
             # actually asked.
-            st.session_state[state.CURRENT_CONV] = None
+            state.open_chat(None)
             st.session_state[ARMED] = None
             st.rerun()
 
@@ -58,10 +63,11 @@ def render() -> None:
                 continue
 
             label = chat.get("title") or "New chat"
-            # A long question makes an unreadable button in a narrow column, and
-            # the delete control needs room beside it.
-            if len(label) > 34:
-                label = label[:33].rstrip() + "…"
+            # Short enough to stay on one line in the sidebar. At 34 characters
+            # every title wrapped onto two, which made a list of five chats look
+            # like a wall and pushed the rest of the sidebar off the screen.
+            if len(label) > LABEL_MAX_CHARS:
+                label = label[: LABEL_MAX_CHARS - 1].rstrip() + "…"
 
             open_col, delete_col = st.columns([5, 1], vertical_alignment="center")
             with open_col:
@@ -113,7 +119,7 @@ def _render_confirm(chat: dict) -> None:
 
 
 def _open(conv_id: str) -> None:
-    st.session_state[state.CURRENT_CONV] = conv_id
+    state.open_chat(conv_id)
     # Opening a chat cancels a pending delete on another one: the user has moved
     # on, and leaving it armed means a later stray click deletes something they
     # are no longer looking at.
@@ -141,5 +147,5 @@ def _delete(conv_id: str) -> None:
     # Deleting the chat that is open would leave the screen pointing at something
     # that no longer exists, so it falls back to a new empty chat.
     if st.session_state.get(state.CURRENT_CONV) == conv_id:
-        st.session_state[state.CURRENT_CONV] = None
+        state.open_chat(None)
     state.notice("Chat deleted.")

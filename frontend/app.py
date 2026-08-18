@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st  # noqa: E402
 
+from config import settings  # noqa: E402
 from frontend import api_client, state  # noqa: E402
 from frontend.components import (
     chat,
@@ -34,7 +35,21 @@ from frontend.components import (
     sidebar,
 )  # noqa: E402
 
-st.set_page_config(page_title="Lens", layout="centered")
+# Wide, because a cited page is shown beside the answer rather than over it, and
+# two columns in a centred page leave neither of them readable.
+st.set_page_config(page_title="Lens", layout="wide")
+
+# How the width is split when a page is open. The thread keeps the larger share:
+# the answer is what is being read, and the page is what is being checked against
+# it.
+# The page panel is a fixed frame now, so the thread keeps most of the width and
+# the panel takes what it needs and no more.
+THREAD_SHARE, PAGE_SHARE = 1.6, 1.0
+
+# Without a page open the thread would otherwise stretch to the full window, and
+# a line of text that long is hard to read. Empty columns either side hold it to
+# a comfortable measure.
+MARGIN_SHARE = 0.5
 
 
 def main() -> None:
@@ -69,27 +84,50 @@ def main() -> None:
         st.chat_input("Add a document first", disabled=True)
         return
 
-    context_indicator.render(conversation, documents)
+    # Chosen by the newest answer, not by a click. Nothing cited - a greeting, a
+    # question about the app, a refusal - means nothing to show.
+    viewing = citations.cited_page(conversation)
 
-    left, right = st.columns([1, 1])
-    with left:
+    if viewing:
+        thread_column, page_column = st.columns([THREAD_SHARE, PAGE_SHARE], gap="large")
+    else:
+        # One column of the same measure, so opening a page widens the window's
+        # use rather than reflowing everything that was already on screen.
+        _, thread_column, _ = st.columns([MARGIN_SHARE, THREAD_SHARE, MARGIN_SHARE])
+        page_column = None
+
+    with thread_column:
+        context_indicator.render(conversation, documents)
+
+        # Documents only. "New chat" lives in the sidebar beside the chat list,
+        # where the rest of the chat controls are, and having it twice on one
+        # screen only raises the question of whether the two differ.
         if st.button("Documents", width="stretch"):
             documents_drawer.open_drawer(documents)
-    with right:
-        if st.button("New chat", width="stretch"):
-            st.session_state[state.CURRENT_CONV] = None
-            st.rerun()
 
-    chat.render_thread(conversation, documents)
+        # A frame of its own, the same height as the page panel beside it. The
+        # window itself does not scroll: left to grow, the thread moved the whole
+        # page under the reader on every answer, so a question could be half in
+        # view and its answer half out of it.
+        thread_frame = st.container(height=settings.PANEL_HEIGHT, border=False)
 
-    # Opened by a citation, after the thread is drawn so it sits on top.
-    viewing = st.session_state.pop("page_view", None)
-    if viewing:
-        citations.page_dialog(viewing, documents)
+    if viewing and page_column is not None:
+        with page_column:
+            citations.page_panel(viewing)
 
+    # Outside the columns on purpose: Streamlit pins a top-level chat input to the
+    # bottom of the window, and one nested in a column scrolls away with the
+    # thread.
     question = st.chat_input("Ask about your documents")
-    if question:
-        chat.ask(conversation, documents, question)
+
+    # Filled last so the streamed answer lands at the end of the thread, where the
+    # conversation reads to, and the frame is then scrolled to it.
+    with thread_frame:
+        chat.render_thread(conversation, documents)
+        if question:
+            chat.ask(conversation, documents, question)
+
+    chat.scroll_to_latest()
 
 
 def _open_conversation() -> dict | None:
@@ -107,7 +145,9 @@ def _open_conversation() -> dict | None:
         return api_client.conversation(conv_id)
     except api_client.LensApiError as error:
         if error.code == "conversation_not_found":
-            st.session_state[state.CURRENT_CONV] = None
+            # An id from the address bar can name a chat deleted since, so this is
+            # reached on an ordinary refresh, not only by a stale tab.
+            state.open_chat(None)
             return None
         st.error(error.message)
         return None
