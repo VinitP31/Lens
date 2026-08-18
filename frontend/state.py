@@ -33,14 +33,33 @@ NOTICE = "notice"
 # rerun has to be a session key.
 DELETE_ARMED = "delete_armed"
 
+# The page shown beside the thread is chosen by the answer, not by a click: the
+# newest answer's first source appears there on its own. These two keys record the
+# reader overruling that - opening a different source, or closing the panel - and
+# both are cleared when the next answer arrives, because that answer cites
+# something else.
+PAGE_VIEW = "page_view"  # a source the reader opened instead
+PAGE_CLOSED = "page_closed"  # the automatic page they dismissed
+PAGE_ANCHOR = "page_anchor"  # which answer those two were about
+
 DEFAULTS = {
     CURRENT_CONV: None,
+    PAGE_VIEW: None,
+    PAGE_CLOSED: None,
+    PAGE_ANCHOR: None,
     SENT_UPLOADS: set(),
     WATCHING: None,
     SCOPE_DRAFT: None,
     NOTICE: None,
     DELETE_ARMED: None,
 }
+
+
+# Which chat is open, kept in the address bar. Session state is wiped by a
+# refresh, and without this the app forgot which chat was on screen: the next
+# question started a brand new one, so the sidebar filled with chats the user
+# never asked for and a follow-up lost the history it needed to be understood.
+CHAT_PARAM = "chat"
 
 
 def init() -> None:
@@ -50,6 +69,27 @@ def init() -> None:
             # A fresh copy per session: a set shared between sessions would leak
             # one user's upload history into another's guard.
             st.session_state[key] = set(value) if isinstance(value, set) else value
+
+    # A refresh arrives with empty session state and the address bar intact, so
+    # this is what carries the open chat across one.
+    if st.session_state[CURRENT_CONV] is None:
+        from_url = st.query_params.get(CHAT_PARAM)
+        # A repeated parameter arrives as a list. Taking the first is what a
+        # browser does with `?chat=a&chat=b`, and passing a list on as an id would
+        # fail deep inside the API client instead of here.
+        if isinstance(from_url, list):
+            from_url = from_url[0] if from_url else None
+        if from_url:
+            st.session_state[CURRENT_CONV] = from_url
+
+
+def open_chat(conv_id: str | None) -> None:
+    """Open a chat, or none, and record it where a refresh will still find it."""
+    st.session_state[CURRENT_CONV] = conv_id
+    if conv_id:
+        st.query_params[CHAT_PARAM] = conv_id
+    elif CHAT_PARAM in st.query_params:
+        del st.query_params[CHAT_PARAM]
 
 
 def already_sent(data: bytes) -> bool:
