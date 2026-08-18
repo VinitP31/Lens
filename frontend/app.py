@@ -12,9 +12,19 @@ transient UI state - which chat is open, which uploads this session has already
 sent. The database is the only thing that is always right.
 """
 
-import streamlit as st
+import sys
+from pathlib import Path
 
-from frontend import api_client, state
+# Streamlit puts the script's own directory on the import path, not the directory
+# it was launched from, so `frontend.api_client` is not importable by default and
+# the app fails on its first import with no clue as to why. Added here rather than
+# asked of the reader as a PYTHONPATH: `streamlit run frontend/app.py` is the
+# command everyone will type, and it has to work.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import streamlit as st  # noqa: E402
+
+from frontend import api_client, state  # noqa: E402
 from frontend.components import (
     chat,
     citations,
@@ -22,7 +32,7 @@ from frontend.components import (
     documents_drawer,
     empty_state,
     sidebar,
-)
+)  # noqa: E402
 
 st.set_page_config(page_title="Lens", layout="centered")
 
