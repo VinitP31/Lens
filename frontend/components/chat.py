@@ -21,6 +21,14 @@ from frontend.components import citations as citations_ui
 # system worked correctly and is telling the truth about what it found.
 ABSTAIN_TEXT = "I couldn't find this in your documents."
 
+# What the progress line says at each stage. Plain descriptions of what is
+# actually happening, so the wait is explained rather than merely animated.
+SEARCHING_TEXT = "Searching your documents"
+WRITING_TEXT = "Writing the answer"
+DONE_TEXT = "Answered"
+NOTHING_FOUND_TEXT = "Nothing close enough found"
+FAILED_TEXT = "That did not finish"
+
 
 def render_thread(conversation: dict | None, documents: list[dict]) -> None:
     """Draw every turn of the open chat."""
@@ -84,13 +92,23 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
 
     with st.chat_message("assistant"):
         finished: dict = {}
+        # Streamlit serves a session on one thread, so the page is frozen from
+        # here until the answer arrives. Several seconds of a page that looks
+        # stuck reads as a broken app, so what is happening is said out loud.
+        # The stages are real, not decorative: the label changes when the first
+        # token actually arrives, which is the moment searching ended.
+        progress = st.status(SEARCHING_TEXT, expanded=False)
 
         def stream():
             """Yield text; keep the final answer object out of the display."""
+            writing = False
             for piece in api_client.ask(conv_id, question):
                 if isinstance(piece, api_client.Answer):
                     finished["answer"] = piece
                 else:
+                    if not writing:
+                        progress.update(label=WRITING_TEXT)
+                        writing = True
                     yield piece
 
         try:
@@ -99,17 +117,22 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
             # An error is not an abstention. Saying "not in your documents" when
             # the truth is that a call failed would be the one lie this system
             # exists to avoid.
+            progress.update(label=FAILED_TEXT, state="error")
             st.error(f"{error.message}")
             return
 
         answer = finished.get("answer")
         if answer is None:
+            progress.update(label=FAILED_TEXT, state="error")
             st.error("The answer did not finish. Ask again.")
             return
 
         if answer.abstained:
+            # No text was ever streamed, so the label still says "searching".
+            progress.update(label=NOTHING_FOUND_TEXT, state="complete")
             _render_abstention(conversation, documents)
         else:
+            progress.update(label=DONE_TEXT, state="complete")
             citations_ui.render(answer.citations, documents, key_prefix="live")
 
     # Redrawn from the backend so the new turn, its title and its stored
