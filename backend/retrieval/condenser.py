@@ -1,20 +1,14 @@
 """Shortening a very long message before it is searched with.
 
-A long message embeds badly, and the reason is worth stating because it is not
-obvious. An embedding is one point for the whole text. A thousand-word message
-spreads its meaning across far more ground than any chunk covers, so the point
-it produces sits some distance from every chunk rather than close to the right
-one. The result is not a wrong match; it is a weak match against everything,
-which drags the top score down and can push a perfectly answerable question below
-the gate.
+An embedding is one point for the whole text, so a thousand-word message sits some
+distance from every chunk rather than close to the right one. That is not a wrong
+match but a weak match against everything, which drags the top score down and can
+push an answerable question below the gate.
 
-So above a threshold the message is reduced to the question inside it, and that
-is what gets embedded. The original is still what the user sees and what the
-answer model is asked, because the reduction is a search aid, not a rewrite of
-what somebody said.
-
-The UI is told this happened. Silently searching for something other than what
-was typed would be the kind of quiet substitution this project exists not to do.
+Above a threshold the message is reduced to the question inside it, and only for
+searching: the original is what the user sees and what the answer model is asked.
+The UI says it happened, because silently searching for something other than what
+was typed is exactly the substitution this project avoids.
 """
 
 import os
@@ -66,19 +60,13 @@ class Condensed:
 def keeps_specifics(original: str, rewritten: str) -> bool:
     """Whether a rewrite kept every number and code the original had.
 
-    Shared with the analyzer, because both shorten or restate a question and both
-    fail the same way. Measured on this corpus: a message mentioning a total of
-    100 points was rewritten without the number, and the passage holding the
-    actual figures dropped out of the results entirely - the question retrieved
-    the topic instead of the fact, and the answer became an honest refusal to a
-    question the documents answer.
+    Shared with the analyzer, since both restate a question and both fail the same
+    way. Measured: a message mentioning a total of 100 points was rewritten without
+    the number, and the passage holding the figures dropped out of the results
+    entirely. Instructions alone did not fix it reliably, so the decision is made
+    here - a rewrite that lost a specific is discarded.
 
-    Instructions alone did not fix that reliably. The model is good at language
-    and this is not a language decision, so it is made here instead: a rewrite
-    that lost a specific is discarded and the original is searched with.
-
-    Only losses matter. A rewrite that adds a number is a different problem, and
-    one the prompts forbid rather than this check.
+    Only losses matter; a rewrite that adds a number is the prompt's problem.
     """
     lost = set(SPECIFIC.findall(original)) - set(SPECIFIC.findall(rewritten))
     return not lost

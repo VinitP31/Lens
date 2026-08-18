@@ -1,27 +1,19 @@
 """Working out what a message is, and what it means on its own.
 
-Two jobs, one call. Both need the same input - the chat so far plus what was just
-typed - so asking twice would double the latency and the cost for no gain.
+Two jobs in one call, because both need the same input - the chat so far plus what
+was just typed.
 
-**What kind of message is it.** Without this, "hi" goes through search, matches
-nothing, and comes back as "I could not find that in your documents". That is
-correct by the system's own rules and obviously wrong to a person. Three kinds:
-a greeting, a question about the app itself, and a real question about the
-documents. Only the last one searches anything.
+What kind of message: a greeting, a question about the app, or a real question.
+Only the last searches anything. Without this, "hi" is searched, matches nothing,
+and comes back as "I could not find that in your documents".
 
-**What does it mean on its own.** "And for part-time employees?" means almost
-nothing by itself. Read against the previous turn it becomes "what is the annual
-leave entitlement for part-time employees?", and that is what gets embedded and
-searched. The user still sees what they typed.
+What it means alone: "And for part-time employees?" becomes "what is the annual
+leave entitlement for part-time employees?" and that is what gets embedded. The
+user still sees what they typed.
 
-The classification is the model's, but nothing important rests on it. A greeting
-misread as a question gets searched and honestly refused. A question misread as a
-greeting gets a friendly reply and the user asks again. Neither can produce a
-wrong answer with a citation, which is the only failure that matters here.
-
-If the call fails, the message is treated as a real question and searched exactly
-as typed. Degrading toward "search it" is safe; degrading toward "do not search
-it" would silently swallow real questions.
+Nothing important rests on the classification - neither mistake can produce a
+wrong answer with a citation. If the call fails the message is searched as typed,
+because degrading toward "do not search" would swallow real questions.
 """
 
 import json

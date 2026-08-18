@@ -1,20 +1,14 @@
 """Validating and resolving the citations in an answer.
 
-This is the module that makes the product's central claim true. The model cites a
-number; code decides whether that number was supplied, and code looks up the
-document, section, page and coordinates behind it. A citation to a document that
-was never retrieved cannot be rendered, because the model never had the means to
-write one.
+The model cites a number; code decides whether that number was supplied and looks
+up the document, section, page and coordinates behind it. So an invented source is
+not unlikely, it is unavailable - the model never had the means to write one.
 
-The whole design rests on the model handling only the part it cannot get
-structurally wrong. It can be wrong about which passage supports its sentence -
-nothing here can detect that, and the answer to it is that the source page is one
-click away. It cannot be wrong about what document `[2]` refers to, because it
-does not decide.
+The model can still be wrong about which passage supports its sentence. Nothing
+here detects that, which is why the source page is one click away.
 
-An answer with no valid citation left is not an answer. It is either an
-abstention the model phrased as prose, or an ungrounded claim, and both are shown
-as "I don't know" rather than as an answer nobody can check.
+An answer with no valid citation left is shown as "I don't know": it is either an
+abstention phrased as prose or an ungrounded claim.
 """
 
 import re

@@ -1,22 +1,15 @@
 """Find the chunks most likely to answer a question.
 
-Retrieval only. No gate, no generation, no judgement about whether the chunks are
-good enough - those are separate stages, and keeping them apart is what lets this
-one be measured on its own.
+Retrieval only - no gate, no generation - which is what lets it be measured on its
+own.
 
-Three things happen here that are not just "search":
+Scope is resolved against the registry rather than taken on trust: the vector store
+has no idea a document was deleted, so searching without asking leaves a
+soft-deleted document answering questions.
 
-Scope is resolved against the registry, not taken on trust. The vector store has
-no idea a document was deleted; that lives in SQLite. Searching without asking
-means a soft-deleted document keeps answering questions.
-
-Twelve are fetched to pass five on. Overlap deliberately makes neighbouring
-chunks near-duplicates, so asking for exactly five spends slots on repeats of one
-passage.
-
-Near-duplicates are collapsed. Two chunks sharing an overlap window are the same
-answer twice, and the second one has displaced a different passage that might
-have completed it.
+Twelve are fetched to pass five on, because overlap makes neighbouring chunks
+near-duplicates and asking for exactly five spends slots on repeats. Those
+duplicates are then collapsed.
 """
 
 from dataclasses import dataclass

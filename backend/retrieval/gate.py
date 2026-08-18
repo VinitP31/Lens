@@ -1,23 +1,16 @@
 """The confidence gate: decide whether to answer at all, before any LLM call.
 
-One comparison. Its value is entirely in where it sits - ahead of generation, so
-a question the corpus has nothing on never reaches a model that would answer it
-anyway. Free, deterministic, identical every time.
-
-Two things this module is careful about.
+One comparison, and its value is where it sits - ahead of generation, so a question
+the corpus has nothing on never reaches a model that would answer it anyway.
 
 It compares `Hit.similarity`, which the vector store has already turned the right
-way up. It never touches a raw Milvus score, because the field Milvus calls
-`distance` holds a similarity under the cosine metric, and getting that backwards
-builds a system that answers confidently on nonsense and refuses real questions.
+way up, never a raw Milvus score: under cosine the field called `distance` holds a
+similarity, and reading it backwards builds a system that answers confidently on
+nonsense and refuses real questions.
 
-It does not pretend to catch everything. Measurement showed the gate stops
-questions the corpus has nothing relevant for, and cannot stop an on-topic
-question whose answer is simply absent - those score as high as good questions,
-because similarity measures what a passage is about, not what it contains. Those
-are refused later by the model reading the chunks. Recording that boundary here
-matters, because a gate believed to be complete would make the prompt's
-abstention rule look like a formality.
+It does not catch everything. Measured, it cannot stop an on-topic question whose
+answer is absent - those score as high as good ones, because similarity measures
+what a passage is about, not what it contains. The prompt refuses those.
 """
 
 from dataclasses import dataclass

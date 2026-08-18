@@ -1,26 +1,17 @@
 """Building the prompt.
 
-Assembly is here rather than inside the generation call so it can be read and
-tested without a network. The prompt is the only place in Lens where behaviour is
-expressed in English instead of code, which makes it the part most worth being
-able to look at directly.
+Assembly lives here rather than inside the generation call so it can be read and
+tested without a network.
 
-The order is fixed and matters twice.
+The fixed order matters twice. For cost, because providers discount a repeated
+prompt prefix and matching needs it byte-identical, so every unchanging instruction
+comes before the first thing that varies. And for behaviour, because the model is
+told what it may use before it is shown what it has; reversed, the passages read as
+an invitation to answer however possible.
 
-It matters for cost: providers discount a repeated prompt prefix, and matching
-needs the prefix to be byte-identical. Every instruction that never changes comes
-before the first thing that does, so the discount applies to the whole block
-without anyone arranging it.
-
-It matters for behaviour: the model is told what it may use before it is shown
-what it has. Reversing that puts the passages first and reads as an invitation to
-answer from them however possible.
-
-Two things the model is deliberately not trusted with. It never writes a document
-name or a page number - it cites a number, and code resolves the rest, so an
-invented source is not merely unlikely but unavailable. And it is told to abstain
-in an exact string rather than in prose, because code has to recognise that
-reliably.
+Two things the model is not trusted with: it never writes a document name or page
+number, only a number code resolves; and it abstains with an exact string rather
+than prose, because code has to recognise that reliably.
 """
 
 from collections.abc import Sequence

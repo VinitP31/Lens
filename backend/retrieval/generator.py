@@ -1,27 +1,18 @@
 """Producing one grounded answer.
 
-The gate has already run by the time anything here is called. That ordering is
-the point of the whole design, so this module never re-decides whether to answer -
-it is reached only when the numbers said yes.
+The gate has already run, so this never re-decides whether to answer. What it
+decides is whether what came back is usable, and there are three outcomes that
+must not be conflated:
 
-What it does decide is whether what came back is usable. There are three
-outcomes, and conflating any two of them would misinform the user:
+An answer, with at least one citation code could resolve. An abstention, because
+the model said the passages do not hold the answer or because every citation it
+offered was invented - both mean nothing here can be checked. And a failure,
+because the provider could not be reached, which is not an abstention: telling
+somebody their documents do not cover a question when a network call failed would
+be a lie in the one place this system exists not to tell one.
 
-An answer, with at least one citation code could resolve.
-
-An abstention, because the model reported the passages do not hold the answer, or
-because every citation it offered was invented. Both mean the same thing to a
-reader - nothing here can be checked - and both are shown as "I don't know".
-
-A failure, because the provider could not be reached. This is not an abstention.
-Telling somebody their documents do not cover a question when the truth is that a
-network call failed would be a lie in the one place this system exists not to
-tell one.
-
-The model call is injected, so the whole suite runs offline for nothing. Tests
-here assert on structure and on the three outcomes, never on the wording of an
-answer, which varies between runs and would make the suite flaky while proving
-nothing.
+The model call is injected, so the suite runs offline. Tests assert on structure
+and on the three outcomes, never on wording.
 """
 
 import os
@@ -51,20 +42,13 @@ REASON_EMPTY_ANSWER = "empty_answer"
 def strip_marker(reply: str) -> tuple[str, bool]:
     """Remove the abstention marker from a reply, wherever it appears.
 
-    The prompt asks for the marker alone and nothing else, and usually gets it.
-    But a question with two parts can be half answerable, and then the model
-    answers the half it can and appends the marker for the rest - measured on
-    this corpus, not imagined.
+    A two-part question can be half answerable, and the model then answers the half
+    it can and appends the marker for the rest. Checking only the start of the reply
+    let that through, and the literal marker was shown at the end of an otherwise
+    good answer.
 
-    Checking only the start of the reply let that through, and the user was shown
-    the literal word NOT_IN_DOCUMENTS at the end of an otherwise good answer.
-    Cleaning it here means the marker is a signal between the prompt and the
-    code, which is what it was always meant to be, rather than something a user
-    can ever read.
-
-    Returns the cleaned text and whether the marker was present, so a partly
-    answerable question is visible in diagnostics instead of looking like an
-    ordinary answer.
+    Returns the cleaned text and whether the marker was there, so a partly
+    answerable question shows up in diagnostics.
     """
     if settings.ABSTENTION_MARKER not in reply:
         return reply.strip(), False
@@ -242,17 +226,12 @@ def stream(
 ) -> Iterator[str | Answer]:
     """The same answer, yielding text as it arrives and the `Answer` last.
 
-    Streaming exists so text appears immediately, but the abstention marker must
-    never reach the screen - a user would watch NOT_IN_DOCUMENTS type itself out,
-    or find it appended to an otherwise good answer.
+    Text is released with a short hold-back - everything but the last few
+    characters, which might be the beginning of the abstention marker. The delay is
+    one word, not the whole answer, and the marker never reaches the screen.
 
-    So text is released with a short delay: everything except the last few
-    characters, which are held because they might be the beginning of the marker.
-    The delay is the length of one word, not the length of the answer.
-
-    The marker can appear anywhere, not only at the start. A question with two
-    parts can be half answerable, and then the model answers the half it can and
-    marks the rest - so the whole stream is filtered, not just its opening.
+    The whole stream is filtered, not just its opening: a half-answerable question
+    gets the marker appended rather than sent alone.
     """
     chat = chat or openai_chat()
     messages = prompt.assemble(question, hits, names)
