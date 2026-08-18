@@ -510,6 +510,18 @@ ABSTENTION_MARKER = "NOT_IN_DOCUMENTS"
 # chat reply; the page view is where the full passage is read.
 CITATION_SNIPPET_CHARS = 300
 
+# A table gets more room, and is cut only between rows. A row cut in half states
+# a label with no value - "Maximum age | 90…" - which is worse than not showing
+# the row at all, because a reader takes what they can see as what the document
+# says. Wide enough to hold most whole tables in the sample corpus, so the common
+# case is not cut at all.
+CITATION_TABLE_SNIPPET_CHARS = 1200
+
+# Marks a table that had rows left over, so the screen can say so rather than
+# leaving a reader to assume they are looking at all of it. Its own line, never
+# part of a row.
+SNIPPET_TRUNCATED_MARK = "…"
+
 
 def ensure_dirs() -> None:
     """Create the runtime directories. Safe to call repeatedly."""

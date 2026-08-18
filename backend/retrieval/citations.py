@@ -21,6 +21,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from backend.ingestion.chunk import TYPE_TABLE
 from backend.storage.vector_store import Hit
 from config import settings
 
@@ -89,17 +90,56 @@ def parse(answer: str) -> list[int]:
     return seen
 
 
-def _snippet(text: str) -> str:
-    """The opening of a passage, cut at a word boundary."""
+def _snippet(text: str, element_type: str = "") -> str:
+    """The opening of a passage, cut at a word boundary.
+
+    Prose is collapsed onto one line, because a passage's own line breaks are an
+    artifact of the page width and reproducing them in a chat reply looks broken.
+
+    A table keeps its line breaks. Collapsing them turns rows into one run of
+    pipes and dashes that nothing can read back into a table - and a table is
+    exactly the passage a reader most wants to check, because a number belongs to
+    the row it sits in and to nothing else.
+    """
+    if element_type == TYPE_TABLE:
+        return _table_snippet(text)
+
     collapsed = " ".join(text.split())
     if len(collapsed) <= settings.CITATION_SNIPPET_CHARS:
         return collapsed
+
     cut = collapsed[: settings.CITATION_SNIPPET_CHARS]
-    # Break at the last space so the snippet never ends mid-word, which reads as
-    # if the passage itself were truncated.
+    # Prefer the end of a sentence. A passage that stops mid-sentence reads as a
+    # half answer, and the reader cannot tell whether the rest mattered.
+    sentence = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
+    if sentence > settings.CITATION_SNIPPET_CHARS // 2:
+        return cut[: sentence + 1]
     if " " in cut:
         cut = cut[: cut.rindex(" ")]
-    return cut + "…"
+    return cut + settings.SNIPPET_TRUNCATED_MARK
+
+
+def _table_snippet(text: str) -> str:
+    """A table cut only between rows, never inside one.
+
+    A half row states a label with no value - "Maximum age | 90" with the rest
+    gone - and a reader takes what is shown as what the document says. Whole rows
+    or nothing, and a mark on its own line when rows were left behind, so the
+    screen can say there is more rather than let the table look complete.
+    """
+    rows = [" ".join(line.split()) for line in text.splitlines()]
+    rows = [row for row in rows if row]
+
+    kept: list[str] = []
+    used = 0
+    for row in rows:
+        if used + len(row) > settings.CITATION_TABLE_SNIPPET_CHARS and kept:
+            kept.append(settings.SNIPPET_TRUNCATED_MARK)
+            break
+        kept.append(row)
+        used += len(row) + 1
+
+    return "\n".join(kept)
 
 
 def validate(answer: str, hits: Sequence[Hit], names: dict[str, str]) -> Validated:
@@ -130,7 +170,7 @@ def validate(answer: str, hits: Sequence[Hit], names: dict[str, str]) -> Validat
                 page=hit.page,
                 section_path=hit.section_path,
                 element_type=hit.element_type,
-                snippet=_snippet(hit.text),
+                snippet=_snippet(hit.text, hit.element_type),
                 bboxes=list(hit.bboxes),
             )
         )
