@@ -522,3 +522,43 @@ def test_a_failed_delete_is_reported_and_leaves_the_chat_alone(monkeypatch, back
 
     assert not at.exception
     assert any("connection refused" in e.value for e in at.error)
+
+
+# --- the app script actually loads --------------------------------------
+
+
+def test_the_app_script_runs_when_launched_the_way_streamlit_launches_it(tmp_path):
+    """Streamlit puts the script's own directory on the import path, not the one it
+    was launched from. Without the path line at the top of `app.py`, every import of
+    `frontend.…` fails and the page shows a traceback instead of a chat - while the
+    server still answers 200, so a status check does not catch it.
+
+    Run in a subprocess from an unrelated directory, with nothing added to the
+    import path, because that is the only arrangement in which the bug appears.
+    """
+    import os
+    import subprocess
+    import sys
+
+    probe = (
+        "from streamlit.testing.v1 import AppTest;"
+        f"app = AppTest.from_file({APP!r}, default_timeout=60);"
+        "app.run();"
+        "print('EXCEPTION' if app.exception else 'CLEAN');"
+        "print('WIDGETS', len(app.chat_input))"
+    )
+    environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "CLEAN" in result.stdout, result.stdout + result.stderr[-2000:]
+    # A chat input proves the script reached the end, not merely that it imported.
+    assert "WIDGETS 1" in result.stdout, result.stdout
