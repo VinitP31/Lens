@@ -3,13 +3,9 @@
     python scripts/check.py              lint, format, tests        (fast)
     python scripts/check.py --corpus     also audit the real PDFs   (slow)
 
-The fast checks are what to run after every change. The corpus audit re-extracts
-all six sample PDFs, which takes a couple of minutes, and is what to run before
-committing anything that touches extraction or chunking.
-
-The corpus audit exists because a green test suite cannot see these problems.
-Every test uses a generated fixture PDF; the invariants below are checked against
-real documents, and each one of them has caught a real defect at least once.
+The corpus audit exists because a green suite cannot see these problems: every test
+uses a generated fixture PDF, while these invariants are checked against the real
+documents. Each has caught a real defect at least once.
 """
 
 import argparse
@@ -29,13 +25,9 @@ FAIL = " FAIL "
 def _log_failure(label: str, output: str) -> Path | None:
     """Keep the whole output of a failed check, and say where it went.
 
-    The console shows the tail only, which is usually all anyone reads. It was not
-    enough once: a test failed, would not reproduce afterwards, and the lines
-    explaining it had already scrolled off - so there was nothing left to diagnose
-    from. The full text now survives on disk whether or not anyone looks at it.
-
-    Never raises. A check that cannot write its log has still produced a result,
-    and losing the result to a logging error would be the worse failure.
+    The tail on screen was not enough once: a test failed, would not reproduce, and
+    the lines explaining it had scrolled off. Never raises - losing the result of a
+    check to a logging error would be the worse failure.
     """
     try:
         settings.CHECK_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)

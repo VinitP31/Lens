@@ -1,15 +1,12 @@
 """Adding a document, and watching it get indexed.
 
-Two guards, both needed.
+Two guards, both needed. `st.file_uploader` hands back the same file on every
+rerun, so without the session guard one upload is sent four or five times and each
+attempt pays for embeddings; the backend's hash check stops a duplicate being
+indexed if one arrives anyway.
 
-`st.file_uploader` hands back the same file on every rerun, and a rerun happens
-whenever anything is clicked. Without the session guard, one upload is sent four
-or five times and each attempt pays for embeddings. The backend's own hash check
-is the second guard: it stops a duplicate being indexed if one arrives anyway.
-
-Indexing runs in the backend as a background task, so this screen polls rather
-than doing the work. That matters because Streamlit serves a session on one
-thread: doing the work here would freeze the page for the whole minute.
+Indexing runs in the backend and this screen polls, because Streamlit serves a
+session on one thread and doing the work here would freeze the page.
 """
 
 import time

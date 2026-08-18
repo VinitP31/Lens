@@ -2,14 +2,12 @@
 
     streamlit run frontend/app.py
 
-Chat-first: this opens straight into a conversation. There is no dashboard and no
-home page, and an empty library is this same screen with the input switched off,
-so a user never has to learn a page they will only see once.
+Chat-first: this opens straight into a conversation, and an empty library is the
+same screen with the input switched off.
 
-Everything on screen is read from the backend on each run. Streamlit re-runs this
-whole file on every interaction, so nothing may be remembered between runs except
-transient UI state - which chat is open, which uploads this session has already
-sent. The database is the only thing that is always right.
+Streamlit re-runs this whole file on every interaction, so nothing may be
+remembered between runs except transient UI state. The database is the only thing
+that is always right.
 """
 
 import sys

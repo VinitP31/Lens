@@ -1,17 +1,11 @@
 """The sidebar: a new chat, the chats you have had, and removing one.
 
-Documents are deliberately not here. They live in a drawer that opens on demand,
-so the sidebar stays one thing - your history - rather than two lists competing
-for the same narrow column.
+Documents are deliberately elsewhere - a drawer that opens on demand - so the
+sidebar stays one list rather than two competing for a narrow column.
 
-Everything shown comes from the backend on every rerun. A sidebar rebuilt from
-session memory would disagree with the database the moment a chat was renamed by
-its first question.
-
-Deleting asks once. The rows are narrow and sit right beside the row you click to
-open a chat, so a stray click is likely and the loss is permanent - the messages
-and the citations stored on them go with it. One click arms the delete, a second
-carries it out, and clicking anything else puts it back.
+Deleting asks once. The rows are narrow and sit beside the row that opens a chat, so
+a stray click is likely and the loss is permanent. One click arms it, a second
+carries it out, clicking anything else puts it back.
 """
 
 import streamlit as st

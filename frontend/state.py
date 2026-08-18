@@ -1,11 +1,8 @@
 """Session keys, and the upload guard.
 
-Streamlit re-runs the whole script on every interaction, which decides what may
-live here: only transient UI state. Chat history and the document library come
-from the backend on every run, because `session_state` is wiped on refresh and a
-screen rebuilt from memory would disagree with the database.
-
-Nothing in this module may hold a connection, a client or a cached answer.
+Only transient UI state lives here. `session_state` is wiped on refresh, so chat
+history and the document library come from the backend on every run, and nothing
+here may hold a connection, a client or a cached answer.
 """
 
 import hashlib

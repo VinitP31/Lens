@@ -1,18 +1,13 @@
 """Build the two stress PDFs, which are checked in and never indexed.
 
-They exist to show how the pipeline degrades on documents unlike the corpus:
-
-- `stress_scanned.pdf` has no text layer at all. Every page is a picture of text,
-  which is what a photocopier or a phone camera produces. It exercises the OCR
-  path and the rejection that follows if OCR finds nothing either.
-- `stress_two_column.pdf` sets prose in two columns. Read row by row it becomes
-  nonsense, so it exercises the reading-order rule that leaves genuine columns
-  alone.
-
-Generated rather than downloaded so the content is known: a test can assert what
-should have been recovered, which a real-world scan cannot.
-
     python scripts/make_stress_pdfs.py
+
+`stress_scanned.pdf` has no text layer at all, so it exercises OCR and the
+rejection that follows if OCR finds nothing either. `stress_two_column.pdf` sets
+prose in two columns, which reads as nonsense row by row, so it exercises the
+reading-order rule that leaves genuine columns alone.
+
+Generated rather than downloaded so a test can assert what should come back out.
 """
 
 import sys

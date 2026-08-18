@@ -1,19 +1,13 @@
 """The only part of the frontend that talks to the backend.
 
-Everything the UI needs comes through here, over HTTP. No screen imports a
-backend module, so the two halves can be run, restarted and reasoned about
-separately, and a screen can never accidentally reach into the database.
+Everything the UI needs comes through here over HTTP, so no screen can reach into
+the database and the two halves can be run and restarted separately.
 
-Two things this module is careful about.
-
-Errors arrive as a code and a message. The code is stable and the message is for
-a person to read, so callers switch on `LensApiError.code` and never on its text.
-Rewording a message must not change which case the UI thinks it is in.
-
-Answers arrive as a stream of events, not one response. Text comes first, the
-validated citations follow once generation has finished, and the diagnostics come
-last. `ask` yields the text as it arrives and returns the rest at the end, which
-is the shape `st.write_stream` wants.
+Errors arrive as a code and a message: callers switch on `LensApiError.code`, never
+on its text. Answers arrive as a stream of events - text, then the validated
+citations once generation has finished, then the diagnostics - so `ask` yields the
+text as it comes and returns the rest at the end, which is the shape
+`st.write_stream` wants.
 """
 
 from collections.abc import Iterator

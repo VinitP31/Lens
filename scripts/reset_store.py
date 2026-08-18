@@ -3,18 +3,10 @@
     python scripts/reset_store.py            say what would be removed
     python scripts/reset_store.py --yes      remove it
 
-Everything the app produces lives under `data/`: the document registry, the vector
-store, the uploaded PDFs, the extraction profiles and the trace logs. Deleting that
-directory by hand does the same thing, and this script exists for two reasons that
-hand-deleting does not cover.
-
-It reports what it is about to destroy before destroying it. The uploaded PDFs are
-the originals a citation renders from, and traces are the only record of what was
-asked; both are easy to forget are in there.
-
-And it refuses to run while the backend is up. Milvus Lite is a single local file
-held open by one process, so removing it underneath a running server leaves a
-backend answering from a store that no longer exists.
+Deleting `data/` by hand does the same thing. This says what it is about to destroy
+first - the uploaded PDFs are what citations render from - and refuses to run while
+the backend is up, since removing the vector store underneath it leaves a server
+answering from a file that no longer exists.
 """
 
 import argparse

@@ -1,15 +1,11 @@
 """The message thread, and asking a question.
 
-Two things here are shaped by how Streamlit works rather than by preference.
+The thread is redrawn from the backend on every rerun, because Streamlit re-runs
+the whole script whenever anything is clicked.
 
-The thread is redrawn from the backend on every rerun. Streamlit re-runs the
-whole script whenever anything is clicked, so a thread held in memory would be
-one interaction out of date; the database is the only thing that is always right.
-
-An answer arrives as a stream, and `st.write_stream` consumes it. The final piece
-of that stream is not text but the finished answer carrying its citations, which
-cannot exist until the model has stopped citing. So the stream is wrapped: text
-goes to the screen as it arrives, and the last object is kept back.
+An answer arrives as a stream and `st.write_stream` consumes it, but the last piece
+is not text - it is the finished answer with its citations, which cannot exist until
+the model has stopped citing. So the stream is wrapped and that object kept back.
 """
 
 import streamlit as st

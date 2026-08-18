@@ -1,17 +1,14 @@
 """Report what the pipeline finds in a PDF.
 
-Not a throwaway. Given any PDF it says how many pages, how dense the text is,
-whether OCR would trigger, how many headings, tables and figures were found,
-what was dropped as furniture, and whether every element carries a bounding box.
-
-Fastest way to understand why a document behaved oddly, and the fastest way to
-see what the pipeline makes of an unfamiliar file.
-
     python scripts/profile_pdf.py samples/*.pdf
     python scripts/profile_pdf.py samples/*.pdf --dump
 
---dump also writes the extracted text, grouped by page, to data/profiles/. Read
-that beside the real PDF to confirm reading order and page attribution.
+Pages, text density, whether OCR would trigger, headings, tables, figures, what was
+dropped as furniture, and whether every element carries a box. The fastest way to
+understand why a document behaved oddly.
+
+`--dump` also writes the extracted text by page to data/profiles/, to read beside
+the real PDF and confirm reading order and page attribution.
 """
 
 import argparse

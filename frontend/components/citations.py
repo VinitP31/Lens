@@ -1,13 +1,11 @@
 """The source list under an answer.
 
-Every field shown here was resolved by the backend when the answer was given and
-stored on the message. Nothing is looked up again, so a document deleted since
-does not change or break an old answer - it is shown as it was, marked as no
-longer in the library.
+Every field was resolved by the backend when the answer was given and stored on the
+message, so a document deleted since cannot change or break an old answer - it is
+shown as it was, marked as no longer in the library.
 
-That is the point of the whole product: an answer you can check. So the sources
-are always visible, never behind a toggle, and each one names its document and
-page before you open it.
+Sources are always visible rather than behind a toggle: an answer you can check is
+the point of the product.
 """
 
 import re
