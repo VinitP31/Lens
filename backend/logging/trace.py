@@ -1,24 +1,15 @@
 """One line of JSON per query, and one per indexed document.
 
-The reason this exists rather than being deferred: "why did it say that?" should
-take seconds, not an afternoon of reproducing the question and hoping it behaves
-the same way. Everything needed to answer it is written once, at the moment it is
-known, and never reconstructed.
+Written once, at the moment it is known, so "why did it say that?" does not mean
+reproducing the question and hoping it behaves the same way.
 
-Two fields are here specifically because getting them confused is the most
-expensive mistake available in this system. Milvus names its score `distance` for
-every metric, but under cosine that field holds a *similarity* - identical is
-+1.0, unrelated is 0.0. Reading it the wrong way up builds something that answers
-confidently on nonsense and refuses real questions, and it looks exactly like a
-prompt bug. So both numbers are logged side by side from the first query, and a
-glance at one line settles it.
+Both the similarity and the raw Milvus distance are logged side by side, because
+confusing the two is the most expensive mistake available here and it looks exactly
+like a prompt bug.
 
-JSONL rather than a database: it appends without locking, survives a crash
-mid-write with the loss of at most one line, and is readable with the tools
-already on the machine.
-
-Nothing here may raise. A trace is a diagnostic; a diagnostic that can break the
-answer it was describing is worse than no diagnostic.
+JSONL rather than a table: it appends without locking and survives a crash
+mid-write with the loss of one line. Nothing here may raise - a diagnostic that
+breaks the answer it describes is worse than none.
 """
 
 import json

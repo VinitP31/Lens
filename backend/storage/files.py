@@ -1,16 +1,11 @@
 """Keeping the original PDF on disk.
 
-Citations render the source page as an image, so the original file is not a
-convenience - it is the evidence the whole product rests on. If it is gone, every
-citation in every past answer stops being checkable.
+Citations render the source page as an image, so the file is the evidence the
+product rests on. If it is gone, every past citation stops being checkable.
 
-Files are named by their content hash, never by the name they were uploaded
-under. An uploaded name is chosen by whoever uploaded it: it can collide, contain
-a path separator, or be a traversal attempt. A hash is fixed-length, unique to
-the bytes, and cannot escape the directory it is written to.
-
-The display name a user sees lives in the registry, where a duplicate can be
-given a counter suffix without touching what is on disk.
+Files are named by content hash, never by the uploaded name: an uploaded name can
+collide, hold a path separator, or be a traversal attempt. The display name lives
+in the registry.
 """
 
 from pathlib import Path

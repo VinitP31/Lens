@@ -1,21 +1,13 @@
 """The application: startup checks, shared connections, and error translation.
 
-Three decisions live here.
+Startup fails rather than degrades. An unreachable store, a missing key, or an
+embedding model that does not match the index all stop the app from starting. The
+mismatch is the worst of the three: vectors from two models occupy different
+spaces, so retrieval rots while everything reports success.
 
-**Startup fails rather than degrades.** An unreachable store, a missing key, or an
-embedding model that does not match the one the index was built with all stop the
-app from starting. A backend that starts and then gives subtly wrong answers is
-worse than one that refuses and says why, and the embedding mismatch is the worst
-of the three: vectors from two different models occupy different spaces, so
-retrieval quietly rots while every part of the system reports success.
-
-**Wreckage is cleaned up before the first request.** A process killed mid-ingest
-leaves a document part-written. It is discarded at startup, so the library never
-contains something half-there.
-
-**Every typed error becomes the same response shape.** One handler maps an
-exception's `code` to an HTTP status, so no route repeats that mapping and the UI
-has one thing to read. A code is stable; a message is not.
+A document left part-written by a killed process is discarded before the first
+request. And every typed error becomes one response shape, mapping `code` to an
+HTTP status in one place - a code is stable, a message is not.
 """
 
 import logging
@@ -36,13 +28,8 @@ log = logging.getLogger(__name__)
 
 API_KEY_VARIABLE = "OPENAI_API_KEY"
 
-# The README tells a reader to put their key in `.env`, so the app has to read it.
-# Without this line it worked only because a dependency happened to load the file
-# on import, which is luck rather than behaviour, and it would break silently the
-# day that dependency stopped.
-#
-# Nothing already in the environment is overwritten: an exported variable is a
-# deliberate choice for this one run, and a file on disk must not beat it.
+# The README tells a reader to put their key in `.env`, so the app reads it. An
+# exported variable wins: it is a deliberate choice for this one run.
 load_dotenv(settings.PROJECT_ROOT / ".env", override=False)
 
 # Which failures are the caller's fault and which are ours. Anything not listed
@@ -73,16 +60,11 @@ STATUS_BY_CODE = {
 def check_stores_agree(db, store) -> None:
     """Refuse to start if the registry lists documents whose chunks are missing.
 
-    The two stores are separate files and nothing keeps them in step. Delete one,
-    restore one from a backup, or fill the disk mid-write, and the library still
-    lists its documents while the text behind them is gone. Every question then
-    answers "not found in your documents" for a library that plainly contains
-    documents, with nothing anywhere to say why.
+    Nothing keeps the two files in step, and a library whose text is gone answers
+    "not found in your documents" with nothing anywhere to say why.
 
-    Only the empty-store case is checked, not the exact count. Chunk totals drift
-    legitimately - a soft-deleted document keeps its chunks, and a reingest
-    upserts - so an exact comparison would refuse to start on a healthy library.
-    Nothing at all against a registry that expects something is unambiguous.
+    Only the empty-store case, not the exact count: chunk totals drift legitimately,
+    since a soft-deleted document keeps its chunks and a reingest upserts.
     """
     expected = sum(
         document.chunk_count for document in registry.list_documents(db, ready_only=True)
@@ -103,12 +85,10 @@ def check_startup(db, store) -> None:
     if not os.environ.get(API_KEY_VARIABLE):
         raise MissingApiKeyError(f"set {API_KEY_VARIABLE} in .env")
 
-    # Reachable, and holding vectors of the width this build expects.
     vector_store.assert_usable(store)
-    # Built with the embedding model now configured. This is the check worth
-    # having: mixing two models degrades retrieval with nothing in the logs.
+    # The check worth having: mixing two embedding models degrades retrieval with
+    # nothing in the logs.
     registry.assert_embed_model(db)
-    # And the two stores still describe the same library.
     check_stores_agree(db, store)
 
 
@@ -116,11 +96,9 @@ def check_startup(db, store) -> None:
 async def lifespan(app: FastAPI):
     """Open the stores once, check them, clean up, and hold them for the process.
 
-    Both are opened once and shared by the request handlers, which all run on
-    the same loop. Background work does not share the SQLite connection: a
-    connection belongs to the thread that made it, and a background task runs on
-    another, so it opens its own. WAL mode is what makes two connections to one
-    file safe.
+    Request handlers share them, since they all run on the same loop. Background
+    work opens its own SQLite connection - a connection belongs to the thread that
+    made it - which WAL mode makes safe.
     """
     settings.ensure_dirs()
     db = registry.connect()

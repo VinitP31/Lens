@@ -1,11 +1,7 @@
 """Typed exceptions with stable error codes.
 
 Every failure in Lens raises one of these. The `code` is a contract: the UI maps
-codes to user-facing messages, so wording can change freely without breaking
-anything. Nothing anywhere may match on exception text.
-
-This file grows one build stage at a time, gaining an exception when the code
-that raises it is written.
+codes to messages, so wording can change freely and nothing matches on text.
 """
 
 

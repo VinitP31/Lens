@@ -1,24 +1,18 @@
 """The chat endpoint, and the health check.
 
-This is where the query pipeline is assembled in the order the rest of the system
-was built to expect:
+Where the query pipeline is assembled:
 
     condense -> analyze -> retrieve -> gate -> generate -> validate -> store
 
-Two of those steps never call a model. A greeting is answered from a fixed
-sentence, and a question about the app is answered from the registry. Both skip
-search entirely, because searching for "hi" and honestly reporting no match is
-correct by the system's rules and absurd to a person.
+Two steps never call a model. A greeting gets a fixed sentence and a question about
+the app is answered from the registry; both skip search, because searching for "hi"
+and honestly reporting no match is correct by the system's rules and absurd to a
+person.
 
-Answers stream. Text arrives as `token` events, the validated citations follow as
-one `citations` event once generation has finished - they cannot be resolved
-before the model has stopped citing - and a `done` event carries the diagnostics.
-A refusal sends no `token` at all, so the UI can render it as its own calm state
-rather than as an answer that happens to say no.
-
-Every turn is stored with the scope it was actually searched against and the
-numbers behind it, because "why did it say that?" should never require asking
-again.
+Answers stream as `token` events, then one `citations` event once generation has
+finished - they cannot be resolved before the model stops citing - then `done` with
+the diagnostics. A refusal sends no `token` at all, so the UI can render it as its
+own state. Every turn is stored with the scope it was searched against.
 """
 
 import json

@@ -1,18 +1,13 @@
 """Chunks and their vectors, in Milvus Lite.
 
-One local file, no server. This module owns everything about how a chunk is
-stored and searched, so no caller ever handles a raw Milvus result.
+One local file, no server. Everything about how a chunk is stored and searched
+lives here, so no caller handles a raw Milvus result.
 
-Two things here are load-bearing:
-
-The chunk id is derived, never generated: `{doc_id}:{index}`. Ingesting the same
-document twice therefore writes to the same primary keys and updates them in
-place, instead of adding a second copy of every chunk.
-
-Search returns an explicit `similarity`, already the right way up. With the
-cosine metric Milvus reports similarity in a field it calls `distance`, and the
-confidence gate compares against a threshold, so the one place that ambiguity
-could invert the whole system is resolved here and nowhere else.
+Two load-bearing details. The chunk id is derived, never generated -
+`{doc_id}:{index}` - so ingesting a document twice updates the same rows instead of
+adding a second copy of every chunk. And search returns an explicit `similarity`,
+already the right way up, because Milvus reports it in a field called `distance`
+and the gate compares against a threshold.
 """
 
 import json

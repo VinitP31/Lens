@@ -1,20 +1,12 @@
 """Chats and their messages, kept in SQLite.
 
-Streamlit wipes its own session state on every refresh, so none of this can live
-in memory. Reopening a chat has to rebuild it from here.
+Streamlit wipes session state on refresh, so none of this can live in memory.
 
-Two things are stored that look redundant and are not.
-
-A conversation stores its scope, and reopening restores that scope along with
-the messages. Restoring only the messages means the same follow-up asked tomorrow
-searches a different set of documents and gets a different answer, which reads as
-a bug rather than as a setting.
-
-A message stores its citations as JSON, exactly as they were resolved when the
-answer was given, and the scope that was in force at the time. Neither is ever
-looked up again. A document deleted next week must not change or break an answer
-from today, and a chat whose scope changed halfway through is unreadable unless
-each message records what it was actually searched against.
+Two stored things look redundant and are not. A conversation stores its scope, so
+reopening it searches the same documents as before rather than answering a
+follow-up differently tomorrow. And a message stores its citations as JSON exactly
+as resolved at the time, never looked up again: a document deleted next week must
+not change or break an answer from today.
 """
 
 import json

@@ -1,19 +1,13 @@
 """Turning a cited page into a picture with the cited text highlighted.
 
-This is the point of the whole design. Every other part of Lens works to make an
-answer attributable; this is what makes it *checkable*. You stop taking the
-answer's word for it, look at the page, and see the sentence.
+What makes an answer checkable rather than merely attributable: you look at the
+page and see the sentence.
 
-An image rather than an embedded PDF viewer, for reasons that are practical
-rather than aesthetic: browsers treat a page anchor inside an iframe
-inconsistently and some ignore it entirely, and no viewer will draw an arbitrary
-box over an arbitrary region. Rendering server-side behaves the same everywhere
-and needs no third-party component.
+An image rather than an embedded viewer - browsers treat a page anchor in an iframe
+inconsistently, and no viewer will draw a box over an arbitrary region.
 
-The coordinates need no conversion here. Extraction stored every box with a
-top-left origin precisely because PyMuPDF draws that way, so a box written at
-Stage 1 lands on the right words at Stage 8 without anybody having to remember
-which way up it was.
+Coordinates need no conversion: extraction stored every box with a top-left origin
+because that is how PyMuPDF draws.
 """
 
 import logging
