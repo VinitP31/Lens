@@ -91,7 +91,7 @@ same time. Stop the backend before running the evaluation.
 ## Checks
 
 ```bash
-python scripts/check.py            # lint, format, 495 tests. About 3 minutes
+python scripts/check.py            # lint, format, 528 tests. About 3 minutes
 python scripts/check.py --corpus   # also re-audits the six sample PDFs. Add a couple more
 ```
 
@@ -186,7 +186,7 @@ Lens/
 ├── docs/LENS.md            The specification
 ├── samples/                Six real PDFs, plus two stress files never indexed
 ├── evaluation/             The two question sets and the measurement script
-├── tests/                  495 tests, no network
+├── tests/                  528 tests, no network
 ├── scripts/                Profiler, checks, reset, stress-PDF generator
 └── data/                   Runtime state. Created on first start, not committed
 ```
