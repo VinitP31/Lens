@@ -37,7 +37,20 @@ def test_the_parent_process_never_loads_docling():
     # error surfaced rather than swallowed: `check=True` raises a
     # CalledProcessError that hides the child's stderr, which is the only thing
     # that explains why the probe failed.
-    environment = {**os.environ, "PYTHONPATH": str(ROOT)}
+    #
+    # gRPC's fork handling is switched off for the child. By the time this test
+    # runs, other tests have opened the vector store, so the pytest process holds
+    # live gRPC threads - and a fork from it runs gRPC's atfork handlers in the
+    # child, which intermittently killed the probe before it reached the exec.
+    # Measured: the child died with "FD from fork parent still in poll list" and a
+    # non-zero exit, roughly one run in six, with nothing wrong with the code under
+    # test. The child replaces itself with a fresh interpreter immediately, so it
+    # has no use for the parent's gRPC state.
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(ROOT),
+        "GRPC_ENABLE_FORK_SUPPORT": "0",
+    }
     result = subprocess.run(  # noqa: S603 - fixed argument list, no shell
         [sys.executable, "-c", probe],
         cwd=ROOT,
@@ -106,3 +119,59 @@ def test_a_worker_that_overruns_is_stopped(monkeypatch, simple_pdf):
 
     with pytest.raises(ExtractionFailedError):
         prepare.prepare(simple_pdf, title="Simple")
+
+
+def test_nothing_on_the_query_side_can_reach_docling():
+    """The same rule as the probe above, checked by reading the imports rather than
+    by running anything.
+
+    The probe proves it for one process on one machine. This proves it for the
+    import graph, cannot be upset by whatever else is running, and says which file
+    broke the rule when it fails.
+    """
+    import ast
+
+    forbidden = {"docling", "docling_core", "torch", "transformers"}
+    # Everything the process that answers questions imports, directly or not.
+    entry_points = [
+        ROOT / "backend" / "main.py",
+        *(ROOT / "backend" / "api").glob("*.py"),
+        *(ROOT / "backend" / "retrieval").glob("*.py"),
+        *(ROOT / "backend" / "storage").glob("*.py"),
+        *(ROOT / "backend" / "rendering").glob("*.py"),
+        ROOT / "backend" / "ingestion" / "pipeline.py",
+        ROOT / "backend" / "ingestion" / "prepare.py",
+        ROOT / "backend" / "ingestion" / "chunk.py",
+        ROOT / "backend" / "ingestion" / "embedder.py",
+        ROOT / "backend" / "ingestion" / "validator.py",
+    ]
+
+    def imports_of(path):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    yield alias.name, node.lineno
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                yield node.module, node.lineno
+
+    seen: set[Path] = set()
+    queue = list(entry_points)
+    offences: list[str] = []
+
+    while queue:
+        path = queue.pop()
+        if path in seen or not path.exists():
+            continue
+        seen.add(path)
+
+        for module, line in imports_of(path):
+            root = module.split(".")[0]
+            if root in forbidden:
+                offences.append(f"{path.relative_to(ROOT)}:{line} imports {module}")
+            if root in ("backend", "config"):
+                # Follow it: the rule is about the whole graph, not one file.
+                target = ROOT / Path(*module.split(".")).with_suffix(".py")
+                queue.append(target)
+
+    assert not offences, "the query side reaches Docling:\n" + "\n".join(offences)
