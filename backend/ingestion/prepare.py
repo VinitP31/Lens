@@ -1,32 +1,13 @@
 """Extraction and chunking, run in a program of their own.
 
-The reason this module exists is a hard incompatibility, not a preference.
+Docling and Milvus Lite each bundle their own copy of the OpenMP runtime, and a
+process that initialises both aborts - `OMP: Error #15`, or a segfault, with no
+traceback. It only bites once the vector index has been loaded, so an empty
+library ingests happily and every run after that dies.
 
-Docling brings its own copy of the OpenMP runtime, inside PyTorch. Milvus Lite
-brings a second copy, inside FAISS. That runtime refuses to initialise twice in
-one process, and when both do it the process dies outright - `OMP: Error #15` and
-an abort, or a bare segmentation fault, with no Python traceback to read.
-
-It only bites once the vector index has actually been loaded, which is why an
-empty library ingests happily and a library with documents already in it does
-not. In other words the failure is invisible on a first run and certain on every
-run after that. Adding a second document is the ordinary case, so this is not an
-edge to note and move past.
-
-There is a documented environment variable that suppresses the abort. Its own
-documentation says it may silently produce incorrect results, which is worse
-than a crash: a crash is visible. Making the two copies into one by hand is a
-per-machine change that would not survive a fresh install by anyone else.
-
-**A subprocess, not a multiprocessing child.** This started as `multiprocessing`
-with the "spawn" method, which is the usual answer and is wrong here. A child
-started that way inherits the parent's open file descriptors, and the parent in
-the real system holds a live gRPC connection to the vector store. Measured: the
-child dies with SIGTRAP and an empty stderr - no traceback, no message, just a
-document that never indexes. It failed three runs in four under load and none
-when the machine was quiet, which is the worst kind of bug to inherit. A
-subprocess launched with its descriptors closed shares nothing with the parent
-and cannot be poisoned by what the parent has open.
+A subprocess rather than a multiprocessing child: a child inherits the parent's
+descriptors, and the parent holds a live gRPC connection to the vector store.
+Measured, that child dies with SIGTRAP and an empty stderr.
 
 `Prepared` and `Chunk` are plain dataclasses over built-in types, so they cross
 the process boundary without either side needing the other's libraries.
@@ -72,25 +53,14 @@ class Prepared:
 def prepare(pdf_path: Path, title: str) -> Prepared:
     """Turn a PDF into chunks without loading Docling into this process.
 
-    Retried once if the worker is killed by a signal without writing anything.
-    That failure is transient and has a measured cause: Milvus Lite leaks around
-    ten file descriptors per connection even after being closed, and starting a
-    child from a process holding hundreds of them, with live gRPC threads among
-    them, occasionally kills the child outright - SIGTRAP, empty stderr, nothing
-    to read.
-
-    The real system opens one connection for its lifetime and never reaches that
-    state, which is why uploads succeed there; a long-running process that opens
-    many would. One retry costs nothing when nothing is wrong and turns a random
-    failed upload into a slower successful one.
-
-    A worker that failed on its own - a corrupt PDF, no text - writes the reason
-    and exits non-zero. That is not retried: it would fail identically.
+    Retried once if the worker is killed by a signal without writing anything: a
+    child started from a process holding many descriptors and live gRPC threads
+    occasionally dies outright. A worker that failed on its own - a corrupt PDF,
+    no text - writes the reason and is not retried.
 
     Raises:
         ExtractionFailedError: the worker died twice, timed out, or wrote nothing.
-        Anything the extraction or chunking stage raised, re-raised unchanged so
-            that a caller still sees its own typed errors.
+        Whatever extraction or chunking raised, re-raised unchanged.
     """
     for attempt in (1, 2):
         try:

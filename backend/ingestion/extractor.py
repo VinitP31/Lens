@@ -240,16 +240,11 @@ def _run_in_heading(text: str) -> tuple[str, int] | None:
     """The title a paragraph opens with, and how deep it sits, if it has one.
 
     Some documents put a title and its explanation in one block: "BEFORE DAY ONE
-    - Ensure everything is in place..." or "Section D: Secure Hosting Facility
-    Profile: Details of...". Layout analysis is right to call each a single
-    paragraph, but the title then never becomes a heading, and two things go
-    wrong: the pages beneath inherit whatever heading came before, and where one
-    item of such a list happens to be typeset as a real heading it becomes the
-    parent of its own siblings.
+    - Ensure everything is in place...". The title then never becomes a heading,
+    so the pages beneath inherit whatever came before.
 
-    A title in capitals introduces a section. A title in ordinary case followed
-    by a colon is a label, and sits at the depth of an ordinary heading so that
-    it is a sibling rather than a child.
+    Capitals introduce a section. Ordinary case with a colon is a label, and sits
+    at ordinary heading depth so it is a sibling rather than a parent.
     """
     flat = re.sub(r"\s+", " ", text)
 
@@ -306,15 +301,10 @@ def _is_really_a_heading(text: str) -> bool:
 def _heading_levels(doc: DoclingDocument) -> dict[str, int]:
     """Work out a depth for every heading, keyed by its element reference.
 
-    Docling reports level 1 for every heading in every document tested, so its
-    own levels cannot express hierarchy: each heading would replace the previous
-    one and a section path could never be more than one heading deep.
-
-    Depth is therefore taken from how large the heading text is compared with
-    the most common heading size in this document. A document whose headings are
-    all the same size degrades to a flat path, which is the honest outcome: if
-    the PDF does not distinguish a parent from a child typographically, nothing
-    can tell them apart.
+    Docling reports level 1 for every heading, so depth comes from the height of
+    the heading text against this document's most common heading height. A
+    document whose headings are all one size gets a flat path, which is honest:
+    if the PDF does not distinguish parent from child, nothing can.
     """
     measured: dict[str, tuple[float, int, bool]] = {}
     for item, _level in doc.iterate_items():

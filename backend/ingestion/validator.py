@@ -1,19 +1,11 @@
 """Checks that run before any expensive work.
 
-Every rejection here costs milliseconds. Everything after this point costs
-seconds per page and money per chunk, so the order of these checks is the whole
-design: the cheapest check that can reject a file runs first.
+The order is the whole design: the cheapest check that can reject a file runs
+first, because everything after this point costs seconds per page and money per
+chunk.
 
-Each failure raises its own type. The API turns the type's code into a message,
-so nothing downstream ever matches on wording - a reworded message must not be
-able to change which rejection the user sees.
-
-Validation is deliberately synchronous. A file that is too big or password
-protected is knowable immediately, and making the user wait for a background job
-to tell them would be a worse answer arriving later.
-
-Nothing here reads the document's content. This decides whether the file is
-worth opening, not whether it says anything useful.
+Each failure raises its own type, so nothing downstream matches on wording.
+Nothing here reads the document's content.
 """
 
 import hashlib
@@ -66,9 +58,8 @@ def validate(data: bytes, seen: SeenFunction | None = None) -> Inspection:
         EmptyDocumentError: opens, but reports no pages.
         TooManyPagesError: over the page limit.
 
-    `seen` maps a hash to the display name of the document already holding it,
-    or None. Passed in rather than looked up here so this module stays free of
-    the database.
+    `seen` maps a hash to the display name of the document already holding it, or
+    None. Passed in so this module stays free of the database.
     """
     digest = content_hash(data)
 

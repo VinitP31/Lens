@@ -3,20 +3,11 @@
     python -m backend.ingestion.worker <pdf> <title> <output>
 
 Reads a PDF, chunks it, and writes the result to `output` as a pickle. Docling is
-imported here and nowhere else in a process that also holds the vector store,
-because the two cannot coexist - see `prepare` for that story.
+imported here and nowhere else in a process that also holds the vector store - see
+`prepare` for why.
 
-Why a separate program rather than a multiprocessing child: a child started from
-inside Python inherits the parent's open file descriptors, and the backend's
-parent holds a live gRPC connection to the vector store. Measured on this machine,
-that child dies with SIGTRAP and an empty stderr - no traceback, nothing to read,
-just a document that never indexes. A subprocess launched with its descriptors
-closed shares nothing and cannot be poisoned by whatever the parent happens to
-have open.
-
-Output goes to a file rather than to stdout on purpose. Docling writes progress and
-warnings to both streams, so anything sharing them would arrive mixed with model
-chatter.
+Output goes to a file rather than stdout because Docling writes progress and
+warnings to both streams.
 """
 
 import pickle

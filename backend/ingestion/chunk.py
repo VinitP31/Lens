@@ -1,13 +1,8 @@
 """What a chunk is.
 
-Deliberately its own module, importing nothing but configuration.
-
-`Chunk` is the boundary object between ingestion and retrieval: the chunker
-produces them, the embedder and the vector store consume them. Defining it inside
-the chunker would mean anything touching a chunk also imports the extractor, and
-through it Docling and PyTorch - so answering a question would load a document
-layout model it never uses, and the two libraries' threading runtimes conflict at
-import time on some platforms.
+Its own module, importing nothing but configuration. Defined in the chunker
+instead, anything touching a chunk would import the extractor and through it
+Docling - which must never load in the process that answers questions.
 """
 
 from dataclasses import dataclass, field

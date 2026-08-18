@@ -1,15 +1,10 @@
 """Turn extracted elements into chunks ready to embed.
 
-Structure first, size second.
+Structure first, size second: a chunk that lines up with a real section has one
+subject and one useful citation, but a section is often far larger than a useful
+chunk, and a vector averaging several topics is close to nothing in particular.
 
-Structure first because a chunk that lines up with a real section has one
-subject, one useful citation, and a heading that describes it. Size second
-because a section is often far larger than a useful chunk, and a vector that
-averages several topics is close to nothing in particular.
-
-Nothing here knows anything about any particular document. Chunks are built
-from the section paths and element types the extractor produced, so an unseen
-PDF chunks the same way with no code change.
+Nothing here knows anything about any particular document.
 """
 
 import re
@@ -174,18 +169,12 @@ def _is_separator_row(line: str) -> bool:
 
 
 def _split_unembeddable(text: str, counter: TokenCounter) -> list[str]:
-    """Split an atomic element that is too large for the embedding model to accept.
+    """Split an atomic element too large for the embedding model to accept.
 
-    Tables are never split for size convenience: half a table is a column
-    heading with no data, or data with no heading. This is the one exception,
-    and it is not a size preference - above the model's hard input ceiling the
-    chunk cannot be embedded at all, so the choice is between a split table and
-    no table in the index.
-
-    The split is at row boundaries and the header rows are repeated into every
-    part, so each part still says what its columns mean. A single row larger
-    than the ceiling is left intact: breaking inside a row would produce values
-    with no column, which is worse than a chunk that fails to embed.
+    The one case where a table is split, because above the model's hard ceiling it
+    cannot be embedded at all. Split at row boundaries with the header repeated
+    into each part; a single oversized row is left intact, since values with no
+    column are worse than a chunk that fails to embed.
     """
     if counter(text) <= settings.EMBED_MAX_INPUT_TOKENS:
         return [text]
@@ -317,23 +306,15 @@ def _normalised(text: str) -> str:
 
 
 def _drop_redundant(pending: list[_Pending], counter: TokenCounter) -> list[_Pending]:
-    """Remove undersized chunks whose text is already carried by a neighbour.
+    """Remove undersized chunks whose text a neighbour already carries.
 
-    Two shapes turn up in real documents. A heading is emitted as an element in
-    its own right and is also the section path of the elements beneath it, so
-    left alone it becomes a three-token chunk saying "17. Administration" while
-    the chunk after it already carries those words in its context header. A bare
-    figure reference behaves the same way against its own caption.
+    A heading is emitted as its own element and is also the section path of what
+    follows, so it becomes a three-token chunk holding a title and no fact, which
+    then competes for a retrieval slot. Dropped only when its text appears in an
+    adjacent chunk, so nothing is lost from the index.
 
-    Such a chunk cannot be retrieved usefully - it holds a title and no fact -
-    and it competes for a slot against the chunk that answers the question. It
-    is dropped only when its text demonstrably appears in an adjacent chunk, so
-    no wording is lost from the document, only repeated wording from the index.
-
-    Deliberately not a rule about short chunks in general. A short chunk that is
-    a whole small subsection is real content, and with its context header it
-    still states its own subject. Whether those cost retrieval is a question for
-    measurement at the evaluation stage, not for a guess here.
+    Not a rule about short chunks in general: a one-paragraph subsection is real
+    content and states its own subject through its header.
     """
     keep: list[_Pending] = []
     for index, item in enumerate(pending):

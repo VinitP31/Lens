@@ -1,22 +1,13 @@
 """Running one document through ingestion, and cleaning up if it fails.
 
-Everything expensive happens here, in one place, so there is exactly one answer
-to "what happens when step four fails". That answer is: nothing is kept.
+Any failure after registration removes the chunks, the file and the row. A
+half-indexed document is worse than a rejected one: it answers from the pages that
+made it in and silently omits the rest.
 
-A half-indexed document is worse than a rejected one. It appears in the library,
-answers questions from the pages that made it in, and silently omits the rest -
-and the user has no way to tell which half they are getting. So any failure after
-registration removes the chunks, removes the file, and discards the row. The
-library never contains a document that is partly there.
-
-Two entry points, and the split matters. `accept` is synchronous and does only
-what is cheap and certain: validate, save, register. `ingest` is the slow half and
-runs in the background. That is why a too-large or password-protected file is
-rejected while the user is still looking at the upload dialog, instead of failing
-minutes later in a job they have to go and check.
-
-`recover` is the third: at startup, any document left mid-ingestion is wreckage
-from a killed process, and is cleaned up the same way a live failure would be.
+`accept` is synchronous and does only what is cheap and certain - validate, save,
+register - so a too-large or encrypted file is refused while the user is still
+looking at the dialog. `ingest` is the slow half and runs in the background.
+`recover` cleans up documents left mid-ingest by a killed process.
 """
 
 import logging
@@ -116,13 +107,9 @@ def ingest(
 
     Returns the number of chunks written.
 
-    The stage is recorded before each step rather than after, so a document that
-    dies during embedding is found in the embedding stage rather than in the one
-    it last completed. That distinction is the only clue available when the
-    process was killed outright.
-
-    Any failure rolls the document back and re-raises. Nothing is left behind for
-    a later run to trip over.
+    The stage is recorded before each step, not after, so a document killed during
+    embedding is found in the embedding stage - the only clue available when the
+    process died outright. Any failure rolls the document back and re-raises.
     """
     prepare_document = prepare_document or prepare.prepare
     document = registry.get(db, doc_id)

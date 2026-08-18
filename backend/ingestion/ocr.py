@@ -1,21 +1,12 @@
-"""Reading a document, and falling back to OCR only when it is needed.
+"""Reading a document, falling back to OCR only when it is needed.
 
-OCR is conditional, never on by default, for two reasons that both matter.
+OCR roughly triples the time and its output is a guess where a real text layer is
+exact, so a document is read normally first and its character density decides.
+Still below the floor after OCR, the document is rejected rather than indexed:
+otherwise it sits in the library answering nothing.
 
-It is slow: running it over a PDF that already has a text layer roughly triples
-the time and buys nothing. And it is a guess. A digital PDF's text layer is
-exactly what the author typed; OCR is a model's reading of a picture of it. Given
-both, the text layer wins every time.
-
-So a document is read normally first, and the character density decides. Below
-the floor, the same document is read again with the engine switched on. Still
-below it afterwards, the document is rejected rather than indexed - a document
-that yielded almost nothing would sit in the library answering nothing, and the
-user would have no way to tell that from the system simply not finding an answer.
-
-The density is averaged over the whole document, not judged per page. A good
-report with a few full-page charts has several near-empty pages and is not
-scanned; treating it per page would send it down the slow path for nothing.
+Density is averaged over the whole document. A report with a few full-page charts
+has near-empty pages and is not a scan.
 """
 
 import logging
