@@ -4,15 +4,9 @@ Where the query pipeline is assembled:
 
     condense -> analyze -> retrieve -> gate -> generate -> validate -> store
 
-Two steps never call a model. A greeting gets a fixed sentence and a question about
-the app is answered from the registry; both skip search, because searching for "hi"
-and honestly reporting no match is correct by the system's rules and absurd to a
-person.
-
-Answers stream as `token` events, then one `citations` event once generation has
-finished - they cannot be resolved before the model stops citing - then `done` with
-the diagnostics. A refusal sends no `token` at all, so the UI can render it as its
-own state. Every turn is stored with the scope it was searched against.
+A greeting and a question about the app skip search entirely. Answers stream as
+`token` events, then `citations` once generation has finished, then `done` with the
+diagnostics; a refusal sends no `token` at all.
 """
 
 import json

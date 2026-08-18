@@ -1,17 +1,13 @@
 """Building the prompt.
 
-Assembly lives here rather than inside the generation call so it can be read and
-tested without a network.
+Assembly lives here so it can be read and tested without a network.
 
-The fixed order matters twice. For cost, because providers discount a repeated
-prompt prefix and matching needs it byte-identical, so every unchanging instruction
-comes before the first thing that varies. And for behaviour, because the model is
-told what it may use before it is shown what it has; reversed, the passages read as
-an invitation to answer however possible.
+The fixed order matters twice: providers discount a repeated prefix only if it is
+byte-identical, and the model is told what it may use before it is shown what it
+has. Reversed, the passages read as an invitation to answer however possible.
 
-Two things the model is not trusted with: it never writes a document name or page
-number, only a number code resolves; and it abstains with an exact string rather
-than prose, because code has to recognise that reliably.
+The model never writes a document name or page number, and abstains with an exact
+string rather than prose.
 """
 
 from collections.abc import Sequence

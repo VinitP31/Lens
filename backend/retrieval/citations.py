@@ -1,14 +1,10 @@
 """Validating and resolving the citations in an answer.
 
 The model cites a number; code decides whether that number was supplied and looks
-up the document, section, page and coordinates behind it. So an invented source is
-not unlikely, it is unavailable - the model never had the means to write one.
+up the document, section, page and coordinates. An invented source is not unlikely,
+it is unavailable.
 
-The model can still be wrong about which passage supports its sentence. Nothing
-here detects that, which is why the source page is one click away.
-
-An answer with no valid citation left is shown as "I don't know": it is either an
-abstention phrased as prose or an ungrounded claim.
+An answer with no valid citation left is shown as "I don't know".
 """
 
 import re

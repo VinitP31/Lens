@@ -1,15 +1,10 @@
 """Find the chunks most likely to answer a question.
 
-Retrieval only - no gate, no generation - which is what lets it be measured on its
-own.
+Retrieval only - no gate, no generation - which is what lets it be measured alone.
 
-Scope is resolved against the registry rather than taken on trust: the vector store
-has no idea a document was deleted, so searching without asking leaves a
-soft-deleted document answering questions.
-
-Twelve are fetched to pass five on, because overlap makes neighbouring chunks
-near-duplicates and asking for exactly five spends slots on repeats. Those
-duplicates are then collapsed.
+Scope is resolved against the registry, not taken on trust: the vector store has no
+idea a document was deleted. Twelve are fetched to pass five on, because overlap
+makes neighbours near-duplicates, and those duplicates are then collapsed.
 """
 
 from dataclasses import dataclass

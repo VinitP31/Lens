@@ -47,20 +47,12 @@ def _summary(document) -> DocumentSummary:
 def _index(store, doc_id: str, job_id: str) -> None:
     """The background half of an upload.
 
-    Opens its own SQLite connection rather than borrowing the one the app holds.
-    A connection belongs to the thread that created it, and this runs on a worker
-    thread - sharing it raises "SQLite objects created in a thread can only be
-    used in that same thread" and the document silently never indexes. Two
-    connections to one file are safe here because the database is in WAL mode.
+    Opens its own SQLite connection: a connection belongs to the thread that made
+    it, and this runs on a worker thread. WAL mode makes two connections safe. The
+    vector store is shared, being a client rather than a per-thread handle.
 
-    The vector store is shared, because it is a client to one local store rather
-    than a per-thread handle.
-
-    Failures are swallowed on purpose. `pipeline.ingest` has already rolled the
-    document back by the time this sees the exception, so there is nothing left
-    to clean up and nobody to raise to - the response was sent long ago. It is
-    logged, and the caller learns of it because the document is gone from the
-    library.
+    Failures are swallowed on purpose - `pipeline.ingest` has already rolled the
+    document back, and the response was sent long ago.
     """
     db = registry.connect()
     try:
@@ -141,16 +133,11 @@ async def page_image(
 ) -> Response:
     """The page as a PNG, with the cited region highlighted.
 
-    `chunk_id` is optional: without it the page renders plain, which is what a
-    reader wants when following a citation whose coordinates were never captured.
+    Without `chunk_id` the page renders plain, for a citation whose coordinates
+    were never captured. A soft-deleted document still renders: refusing would
+    break the old citations the soft delete exists to protect.
 
-    A soft-deleted document still renders. Its file and row are kept precisely so
-    that answers given before it was removed remain checkable - refusing here
-    would break exactly the old citations the soft delete was designed to
-    protect.
-
-    Cached for a day. The bytes are a pure function of the file, the page and the
-    box, and none of the three changes.
+    Cached for a day - the bytes are a pure function of file, page and box.
     """
     db = request.app.state.db
     document = registry.get(db, doc_id, include_deleted=True)

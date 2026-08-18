@@ -1,18 +1,12 @@
 """Producing one grounded answer.
 
-The gate has already run, so this never re-decides whether to answer. What it
-decides is whether what came back is usable, and there are three outcomes that
-must not be conflated:
+The gate has already run, so this never re-decides whether to answer. It decides
+whether what came back is usable, and the three outcomes must not be conflated: an
+answer with at least one resolvable citation, an abstention, and a failure to reach
+the provider - which is not an abstention, because saying the documents do not
+cover a question when a network call failed would be a lie.
 
-An answer, with at least one citation code could resolve. An abstention, because
-the model said the passages do not hold the answer or because every citation it
-offered was invented - both mean nothing here can be checked. And a failure,
-because the provider could not be reached, which is not an abstention: telling
-somebody their documents do not cover a question when a network call failed would
-be a lie in the one place this system exists not to tell one.
-
-The model call is injected, so the suite runs offline. Tests assert on structure
-and on the three outcomes, never on wording.
+The model call is injected, so the suite runs offline.
 """
 
 import os

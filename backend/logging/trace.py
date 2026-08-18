@@ -1,15 +1,11 @@
 """One line of JSON per query, and one per indexed document.
 
-Written once, at the moment it is known, so "why did it say that?" does not mean
-reproducing the question and hoping it behaves the same way.
-
 Both the similarity and the raw Milvus distance are logged side by side, because
 confusing the two is the most expensive mistake available here and it looks exactly
 like a prompt bug.
 
-JSONL rather than a table: it appends without locking and survives a crash
-mid-write with the loss of one line. Nothing here may raise - a diagnostic that
-breaks the answer it describes is worse than none.
+JSONL rather than a table: it appends without locking. Nothing here may raise - a
+diagnostic that breaks the answer it describes is worse than none.
 """
 
 import json

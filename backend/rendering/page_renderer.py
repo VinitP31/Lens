@@ -74,9 +74,7 @@ def render(pdf_path: Path | str, page_number: int, boxes: list[Box] | None = Non
         PageNotFoundError: the page is outside this document.
         RenderFailedError: the file is missing or cannot be read.
 
-    A page with no boxes still renders. A citation whose coordinates were lost is
-    worth less than one with them, but the page itself is still the source, and
-    showing it is better than refusing to.
+    A page with no boxes still renders: the page is still the source.
     """
     path = Path(pdf_path)
     if not path.exists():

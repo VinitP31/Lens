@@ -328,16 +328,11 @@ def soft_delete(connection: sqlite3.Connection, doc_id: str) -> None:
 def discard(connection: sqlite3.Connection, doc_id: str) -> None:
     """Delete the row outright. For a failed ingest, not for a user deletion.
 
-    A document that failed part-way through is not a library entry: it would
-    answer some questions and silently skip the rest of its own content, which
-    is worse than not being there. The row goes, and the failure survives in the
-    trace log instead.
+    A part-indexed document would answer some questions and silently skip the rest
+    of its own content, so the row goes and the failure survives in the trace log.
 
-    Its jobs go with it, in the same transaction. `ingestion_jobs.doc_id` is a
-    foreign key, so leaving them would make this raise and turn every rollback
-    into a second failure. The trace log is where a failed ingest is recorded, so
-    nothing is lost by removing the job row - and a job pointing at a document
-    that no longer exists could not be reported anyway.
+    Its jobs go in the same transaction: `ingestion_jobs.doc_id` is a foreign key,
+    so leaving them turns every rollback into a second failure.
     """
     with connection:
         connection.execute("DELETE FROM ingestion_jobs WHERE doc_id = ?", (doc_id,))

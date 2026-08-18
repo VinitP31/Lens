@@ -1,18 +1,12 @@
 """Turn chunks into vectors.
 
-The only part of ingestion that leaves the machine and the only part that costs
-money, so it batches, retries transient failures, and takes the embedding function
-as an argument - the test suite runs against a stand-in.
+The only part of ingestion that leaves the machine, so it batches, retries
+transient failures, and takes the embedding function as an argument.
 
-Two things are easy to get wrong here. What gets embedded is `chunk.embed_text`,
-the context header followed by the body, which is why a question phrased in a
-heading's words finds a chunk whose body uses different ones. And order is
-restored from the index the provider returns, never from arrival order: getting
-that wrong attaches each chunk's text to another chunk's meaning, with no error
-anywhere.
-
-The query side must embed through this same module, or retrieval degrades with
-nothing in the logs.
+What gets embedded is `chunk.embed_text` - the context header and the body - and
+order is restored from the index the provider returns, never from arrival order:
+getting that wrong attaches each chunk's text to another chunk's meaning with no
+error anywhere. The query side must embed through this same module.
 """
 
 import os

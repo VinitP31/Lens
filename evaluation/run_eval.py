@@ -4,17 +4,12 @@
     python evaluation/run_eval.py               measure retrieval and the gate
     python evaluation/run_eval.py --answers     also generate, and measure abstention
 
-Retrieval is measured before generation exists, on purpose. If retrieval misses,
-no prompt can recover the answer, so a generation metric would only tell you the
-model is fluent - not that the system is right.
+Retrieval is measured before generation, because no prompt can recover an answer
+retrieval missed. A hit means the expected document and page appear among the
+chunks that would be passed to the model; nothing here judges wording.
 
-A hit means the expected document *and* the expected page appear among the chunks
-that would be passed to the model. Nothing here judges wording; the golden set
-records where each answer lives, and that is what gets checked.
-
-The out-of-scope set is not scored here. It has no correct page by definition.
-What it produces is a score distribution, and the separation between the two
-distributions is what the gate threshold is calibrated from at the next stage.
+The out-of-scope set is not scored - it has no correct page by definition. What it
+produces is the score distribution the gate threshold is calibrated from.
 """
 
 import argparse

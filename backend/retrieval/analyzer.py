@@ -1,19 +1,12 @@
 """Working out what a message is, and what it means on its own.
 
-Two jobs in one call, because both need the same input - the chat so far plus what
-was just typed.
+Two jobs in one call, because both need the chat so far plus what was just typed.
+A greeting, a question about the app, or a real question - only the last searches
+anything. And "And for part-time employees?" becomes a question that stands alone
+before it is embedded, though the user still sees what they typed.
 
-What kind of message: a greeting, a question about the app, or a real question.
-Only the last searches anything. Without this, "hi" is searched, matches nothing,
-and comes back as "I could not find that in your documents".
-
-What it means alone: "And for part-time employees?" becomes "what is the annual
-leave entitlement for part-time employees?" and that is what gets embedded. The
-user still sees what they typed.
-
-Nothing important rests on the classification - neither mistake can produce a
-wrong answer with a citation. If the call fails the message is searched as typed,
-because degrading toward "do not search" would swallow real questions.
+If the call fails the message is searched as typed: degrading toward "do not
+search" would swallow real questions.
 """
 
 import json

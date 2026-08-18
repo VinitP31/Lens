@@ -4,11 +4,10 @@
     python scripts/profile_pdf.py samples/*.pdf --dump
 
 Pages, text density, whether OCR would trigger, headings, tables, figures, what was
-dropped as furniture, and whether every element carries a box. The fastest way to
-understand why a document behaved oddly.
+dropped as furniture, and whether every element carries a box.
 
 `--dump` also writes the extracted text by page to data/profiles/, to read beside
-the real PDF and confirm reading order and page attribution.
+the real PDF and check reading order and page attribution.
 """
 
 import argparse

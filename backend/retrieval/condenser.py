@@ -1,14 +1,11 @@
 """Shortening a very long message before it is searched with.
 
 An embedding is one point for the whole text, so a thousand-word message sits some
-distance from every chunk rather than close to the right one. That is not a wrong
-match but a weak match against everything, which drags the top score down and can
-push an answerable question below the gate.
+distance from every chunk rather than close to the right one - a weak match against
+everything, which can push an answerable question below the gate.
 
-Above a threshold the message is reduced to the question inside it, and only for
-searching: the original is what the user sees and what the answer model is asked.
-The UI says it happened, because silently searching for something other than what
-was typed is exactly the substitution this project avoids.
+Only the search text is shortened: the original is what the user sees and what the
+answer model is asked, and the UI says it happened.
 """
 
 import os
