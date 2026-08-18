@@ -30,19 +30,40 @@ NOTHING_FOUND_TEXT = "Nothing close enough found"
 FAILED_TEXT = "That did not finish"
 
 
+def turns(messages: list[dict]) -> list[list[dict]]:
+    """Group a flat list of messages into turns, oldest first.
+
+    A turn is a question and the answer to it. Grouping them is what lets the
+    thread be drawn as pairs rather than as a flat run of messages.
+    """
+    grouped: list[list[dict]] = []
+    for message in messages:
+        if message.get("role") == "user" or not grouped:
+            grouped.append([message])
+        else:
+            grouped[-1].append(message)
+    return grouped
+
+
 def render_thread(conversation: dict | None, documents: list[dict]) -> None:
-    """Draw every turn of the open chat."""
+    """Draw every turn of the open chat, oldest first.
+
+    The order a conversation is read in. The thread sits in a frame of its own,
+    which shows its top, so the frame is scrolled to the newest turn after it is
+    drawn - see `scroll_to_latest`.
+    """
     if not conversation:
         return
 
-    for index, message in enumerate(conversation.get("messages", [])):
-        with st.chat_message(message["role"]):
-            if message["role"] == "assistant" and message.get("abstained"):
-                _render_abstention(conversation, documents)
-                continue
+    for index, turn in enumerate(turns(conversation.get("messages", []))):
+        for message in turn:
+            with st.chat_message(message["role"]):
+                if message["role"] == "assistant" and message.get("abstained"):
+                    _render_abstention(conversation, documents)
+                    continue
 
-            st.markdown(message["content"])
-            citations_ui.render(message.get("citations", []), documents, key_prefix=f"m{index}")
+                st.markdown(message["content"])
+                citations_ui.render(message.get("citations", []), documents, key_prefix=f"t{index}")
 
 
 def _render_abstention(conversation: dict | None, documents: list[dict]) -> None:
@@ -71,7 +92,12 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
     conversation with no messages is a row nobody asked for, and it would appear
     in the sidebar as "New chat" forever.
     """
-    conv_id = conversation["conv_id"] if conversation else None
+    # The session's own record of which chat is open is what decides, not the
+    # conversation object: that object comes from a fetch, and a fetch that failed
+    # for any reason - a hiccup, a slow backend - would look exactly like "no chat
+    # yet" and silently start another one. That is how a sidebar fills with chats
+    # nobody asked for.
+    conv_id = (conversation or {}).get("conv_id") or st.session_state.get(state.CURRENT_CONV)
 
     if conv_id is None:
         draft = st.session_state.get(state.SCOPE_DRAFT)
@@ -84,7 +110,7 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
             st.error(error.message)
             return
         conv_id = created["conv_id"]
-        st.session_state[state.CURRENT_CONV] = conv_id
+        state.open_chat(conv_id)
         st.session_state[state.SCOPE_DRAFT] = None
 
     with st.chat_message("user"):
@@ -138,3 +164,31 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
     # Redrawn from the backend so the new turn, its title and its stored
     # citations are all read from one source rather than patched into memory.
     st.rerun()
+
+
+def scroll_to_latest() -> None:
+    """Put the newest turn in view inside the thread frame.
+
+    The frame does not follow its own content: freshly drawn, it shows the oldest
+    turn, and the answer just asked for sits below the fold. Streamlit has no
+    setting for this, so the last message is scrolled into view directly. The frame
+    is what scrolls, not the window, which is the whole point of the frame.
+
+    Wrapped in a check for the element because a first run has no messages yet, and
+    one pixel tall because that is the smallest height allowed - zero is rejected.
+    """
+    # `st.iframe` rather than `components.html`, which is deprecated past its
+    # removal date. The markup is fixed and written here, never built from anything
+    # a user or a document supplied.
+    st.iframe(
+        """
+        <script>
+            const doc = window.parent.document;
+            const messages = doc.querySelectorAll('[data-testid="stChatMessage"]');
+            if (messages.length) {
+                messages[messages.length - 1].scrollIntoView({block: "end"});
+            }
+        </script>
+        """,
+        height=1,
+    )
