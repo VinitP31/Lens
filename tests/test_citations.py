@@ -155,3 +155,95 @@ def test_whitespace_in_a_snippet_is_collapsed():
 
 def test_markers_can_be_stripped_for_a_plain_copy():
     assert citations.strip_markers("Leave accrues [1] monthly [2].") == "Leave accrues monthly."
+
+
+# --- a table keeps its rows ----------------------------------------------
+
+
+def test_a_table_snippet_keeps_its_line_breaks():
+    """Collapsed onto one line, a table becomes a run of pipes and dashes that
+    nothing can read back into rows - and a number belongs to the row it sits in
+    and to nothing else."""
+    table = "| Rule | Setting |\n|---|---|\n| Minimum length | 12 characters |"
+
+    snippet = citations._snippet(table, "table")
+
+    assert snippet.count("\n") == 2
+    assert snippet.splitlines()[0] == "| Rule | Setting |"
+
+
+def test_prose_is_still_collapsed_onto_one_line():
+    """A passage's own line breaks come from the page width, and reproducing them
+    in a chat reply looks broken."""
+    prose = "The vehicle is stopped\nat the outer barrier\nand the seal checked."
+
+    snippet = citations._snippet(prose, "text")
+
+    assert "\n" not in snippet
+    assert snippet.startswith("The vehicle is stopped at the outer barrier")
+
+
+def test_a_long_table_is_still_bounded():
+    """Bigger room than prose, but still bounded: the page view is where a whole
+    table is read."""
+    from config import settings
+
+    table = "\n".join(f"| Row {n} | value {n} |" for n in range(200))
+
+    snippet = citations._snippet(table, "table")
+
+    assert (
+        len(snippet)
+        <= settings.CITATION_TABLE_SNIPPET_CHARS + len(settings.SNIPPET_TRUNCATED_MARK) + 2
+    )
+    assert snippet.endswith(settings.SNIPPET_TRUNCATED_MARK)
+
+
+def test_a_table_is_cut_between_rows_never_inside_one():
+    """A half row states a label with no value - "Maximum age | 90" with the rest
+    gone - and a reader takes what is shown as what the document says."""
+    big = "| Code | Meaning |\n|---|---|\n" + "\n".join(
+        f"| EX-{n:02d} | exception {n} needing a photograph before the record closes |"
+        for n in range(40)
+    )
+
+    snippet = citations._snippet(big, "table")
+
+    rows = [line for line in snippet.splitlines() if line.startswith("|")]
+    assert rows, "nothing kept"
+    assert all(row.rstrip().endswith("|") for row in rows), "a row was cut in half"
+
+
+def test_a_cut_table_says_there_is_more():
+    from config import settings
+
+    big = "| Code | Meaning |\n|---|---|\n" + "\n".join(
+        f"| EX-{n:02d} | exception {n} needing a photograph before the record closes |"
+        for n in range(40)
+    )
+
+    snippet = citations._snippet(big, "table")
+
+    assert snippet.splitlines()[-1] == settings.SNIPPET_TRUNCATED_MARK
+
+
+def test_a_table_that_fits_is_shown_whole():
+    """Most tables in a document are small. Cutting one that fits would hide rows
+    for nothing."""
+    table = "| Rule | Setting |\n|---|---|\n| Minimum length | 12 characters |"
+
+    snippet = citations._snippet(table, "table")
+
+    assert snippet.splitlines()[-1].endswith("|")
+    assert "…" not in snippet
+
+
+def test_prose_ends_at_a_sentence_when_it_can():
+    """A passage stopping mid-sentence reads as a half answer, and the reader
+    cannot tell whether the rest mattered."""
+    prose = ("First sentence that carries the fact. " * 12) + "A trailing clause that will be cut"
+
+    snippet = citations._snippet(prose, "text")
+
+    assert snippet.endswith(".")
+    assert "…" not in snippet

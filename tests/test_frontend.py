@@ -16,6 +16,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from frontend import api_client, state
+from frontend.components import citations as citations_ui
 from frontend.components import context_indicator
 
 # Absolute: AppTest resolves a relative path against the file that calls it, not
@@ -562,3 +563,74 @@ def test_the_app_script_runs_when_launched_the_way_streamlit_launches_it(tmp_pat
     assert "CLEAN" in result.stdout, result.stdout + result.stderr[-2000:]
     # A chat input proves the script reached the end, not merely that it imported.
     assert "WIDGETS 1" in result.stdout, result.stdout
+
+
+# --- a table citation reads as a table -----------------------------------
+
+
+TABLE_SNIPPET = (
+    "| Rule | Setting |\n"
+    "|------|---------|\n"
+    "| Minimum length | 12 characters |\n"
+    "| Reuse | The last 8 passwords cannot be reused |"
+)
+
+
+def test_a_table_snippet_becomes_rows():
+    """Handed to markdown inside a quotation, a table arrives as one long line of
+    pipes and dashes - unreadable in the one place a reader is checking the
+    answer."""
+    rows = citations_ui.as_rows(TABLE_SNIPPET)
+
+    assert rows[0] == ["Rule", "Setting"]
+    assert ["Minimum length", "12 characters"] in rows
+    # The bar under the header carries no content and must not become a row.
+    assert not any(set("".join(row)) <= set("-: ") for row in rows)
+
+
+def test_a_row_cut_short_by_the_snippet_limit_keeps_what_survived():
+    """The snippet is cut to a fixed length, so its last row is usually partial.
+    Those cells are still what the answer was read from."""
+    rows = citations_ui.as_rows(TABLE_SNIPPET + "\n| Maximum age | 90")
+
+    assert rows[-1] == ["Maximum age", "90"]
+    assert all(len(row) == len(rows[0]) for row in rows)
+
+
+def test_prose_is_not_mistaken_for_a_table():
+    assert citations_ui.as_rows("The vehicle is stopped at the outer barrier.") is None
+
+
+def test_a_single_row_is_not_a_table():
+    """One row is a fragment. Rendering it as a table would invent a header."""
+    assert citations_ui.as_rows("| Minimum length | 12 characters |") is None
+
+
+def test_a_table_stored_as_one_line_still_reads_as_a_table():
+    """Answers given before the backend kept a table's line breaks are stored flat,
+    and a stored citation is never resolved again by design - so an old answer has
+    to keep rendering from exactly what it saved."""
+    flat = (
+        "| Rule | Setting | |-----|-----| | Minimum length | 12 characters | "
+        "| Reuse | The last 8 passwords cannot be reused |"
+    )
+
+    rows = citations_ui.as_rows(flat)
+
+    assert rows[0] == ["Rule", "Setting"]
+    assert ["Minimum length", "12 characters"] in rows
+    assert ["Reuse", "The last 8 passwords cannot be reused"] in rows
+
+
+def test_the_truncation_mark_is_not_shown_as_a_row():
+    """It is a message about the table, not a line of it."""
+    from config import settings
+
+    snippet = (
+        "| Rule | Setting |\n|---|---|\n| Minimum length | 12 characters |\n"
+        + settings.SNIPPET_TRUNCATED_MARK
+    )
+
+    rows = citations_ui.as_rows(snippet)
+
+    assert rows == [["Rule", "Setting"], ["Minimum length", "12 characters"]]
