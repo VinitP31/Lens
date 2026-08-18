@@ -12,6 +12,16 @@ import time on some platforms.
 
 from dataclasses import dataclass, field
 
+# Element types Lens stores. A chunk is one of exactly these.
+#
+# Here rather than in the extractor because retrieval needs to tell a table from
+# a sentence - a table's snippet keeps its rows - and importing the extractor to
+# learn the word "table" would pull Docling into the process that answers
+# questions, which is the one arrangement that cannot work.
+TYPE_TEXT = "text"
+TYPE_TABLE = "table"
+TYPE_FIGURE_CAPTION = "figure_caption"
+
 
 @dataclass(frozen=True)
 class Chunk:

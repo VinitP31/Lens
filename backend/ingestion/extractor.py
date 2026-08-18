@@ -39,12 +39,14 @@ from docling_core.types.doc.document import (
 from docling_core.types.doc.labels import DocItemLabel
 
 from backend.errors import EmptyDocumentError, ExtractionFailedError
+from backend.ingestion.chunk import TYPE_FIGURE_CAPTION, TYPE_TABLE, TYPE_TEXT
 from config import settings
 
-# Element types Lens stores. A chunk is one of exactly these.
-TYPE_TEXT = "text"
-TYPE_TABLE = "table"
-TYPE_FIGURE_CAPTION = "figure_caption"
+# The three type names above are defined in `chunk`, not here, so that retrieval
+# can tell a table from a sentence without importing this module and, with it,
+# Docling. They are re-exported because every caller already reads them from the
+# extractor.
+
 
 # Labels dropped before anything downstream sees them.
 #
