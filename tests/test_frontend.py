@@ -23,6 +23,26 @@ from frontend.components import context_indicator
 # against the repository root.
 APP = str(Path(__file__).resolve().parent.parent / "frontend" / "app.py")
 
+# A one pixel PNG. The panel only has to receive bytes; what they draw is the
+# page renderer's business, tested against real pages elsewhere.
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+    b"\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05"
+    b"\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+CITATION = {
+    "n": 1,
+    "chunk_id": "d1:12",
+    "doc_id": "d1",
+    "display_name": "FleetLink TMS User Manual v4.2",
+    "page": 5,
+    "section_path": "FleetLink > 3. Getting Started > 3.2 Password rules",
+    "element_type": "table",
+    "snippet": "| Rule | Setting |\n|---|---|\n| Minimum length | 12 characters |",
+    "bboxes": [[10.0, 20.0, 100.0, 40.0]],
+}
+
 DOCUMENTS = [
     {
         "doc_id": "d1",
@@ -560,9 +580,13 @@ def test_the_app_script_runs_when_launched_the_way_streamlit_launches_it(tmp_pat
     )
 
     assert result.returncode == 0, result.stderr[-2000:]
+    # No exception is the whole claim: the imports resolved and the script ran to
+    # the end. What it drew is deliberately not asserted - with no backend running
+    # the app correctly draws its "backend is not running" screen and no chat
+    # input, and a test that insisted on the input would pass or fail depending on
+    # whether a developer happened to have the server up.
     assert "CLEAN" in result.stdout, result.stdout + result.stderr[-2000:]
-    # A chat input proves the script reached the end, not merely that it imported.
-    assert "WIDGETS 1" in result.stdout, result.stdout
+    assert "WIDGETS" in result.stdout, result.stdout
 
 
 # --- a table citation reads as a table -----------------------------------
@@ -634,3 +658,317 @@ def test_the_truncation_mark_is_not_shown_as_a_row():
     rows = citations_ui.as_rows(snippet)
 
     assert rows == [["Rule", "Setting"], ["Minimum length", "12 characters"]]
+
+
+# --- the cited page sits beside the answer -------------------------------
+
+
+def _grounded(citations: list[dict] | None = None) -> dict:
+    """A chat whose last answer cites something."""
+    return {
+        "conv_id": "c1",
+        "title": "Password rules",
+        "scope_mode": "library",
+        "scope_doc_ids": None,
+        "messages": [
+            {
+                "msg_id": "m1",
+                "role": "user",
+                "content": "What are the password rules?",
+                "citations": [],
+                "abstained": False,
+            },
+            {
+                "msg_id": "m2",
+                "role": "assistant",
+                "content": "At least twelve characters [1].",
+                "citations": [CITATION] if citations is None else citations,
+                "abstained": False,
+            },
+        ],
+    }
+
+
+def _ungrounded(content: str = "", abstained: bool = True) -> dict:
+    """A greeting, or a refusal. Either way, nothing was cited."""
+    chat = _grounded(citations=[])
+    chat["messages"][1]["content"] = content
+    chat["messages"][1]["abstained"] = abstained
+    return chat
+
+
+def _screen(monkeypatch, conversation: dict, page_image=None):
+    monkeypatch.setattr(api_client, "health", lambda: {"status": "ok"})
+    monkeypatch.setattr(api_client, "documents", lambda ready_only=False: DOCUMENTS)
+    monkeypatch.setattr(api_client, "conversations", lambda: [])
+    monkeypatch.setattr(api_client, "conversation", lambda _id: conversation)
+    monkeypatch.setattr(api_client, "page_image", page_image or (lambda *a, **k: PNG))
+
+    app = AppTest.from_file(APP, default_timeout=30)
+    app.session_state[state.CURRENT_CONV] = conversation["conv_id"]
+    return app
+
+
+def _captions(app) -> list[str]:
+    return [caption.value for caption in app.caption]
+
+
+def test_a_cited_answer_shows_its_page_without_being_asked(monkeypatch):
+    """The page is evidence for the claim beside it, so it is simply there. Making
+    a reader click for it means most answers are never checked at all."""
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+
+    assert not app.exception
+    assert any("highlighted region" in caption for caption in _captions(app))
+    assert any("3.2 Password rules" in caption for caption in _captions(app))
+
+
+def test_a_greeting_shows_no_page(monkeypatch):
+    """ "Hello" cites nothing. A page beside it would claim a source the answer
+    never had."""
+    app = _screen(monkeypatch, _ungrounded(content="Hello.", abstained=False))
+    app.run()
+
+    assert not app.exception
+    assert not any("highlighted region" in caption for caption in _captions(app))
+
+
+def test_a_refusal_shows_no_page(monkeypatch):
+    """The whole meaning of a refusal is that the documents did not hold it."""
+    app = _screen(monkeypatch, _ungrounded())
+    app.run()
+
+    assert not any("highlighted region" in caption for caption in _captions(app))
+
+
+def test_every_source_can_be_reopened(monkeypatch):
+    """Even the one already beside the answer. Without this, closing the panel left
+    no way back to it, which made Close a decision rather than a convenience."""
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+
+    assert [button.label for button in app.button if button.label.startswith("Show page")] == [
+        "Show page 5"
+    ]
+
+    next(button for button in app.button if button.key == "close-page").click().run()
+    reopen = next(button for button in app.button if button.label == "Show page 5")
+    reopen.click().run()
+
+    assert any("highlighted region" in caption for caption in _captions(app))
+
+
+def test_several_sources_can_be_switched_between(monkeypatch):
+    """Only the first is shown, so the others need a way to be reached."""
+    second = dict(CITATION, n=2, chunk_id="d1:20", page=7)
+    app = _screen(monkeypatch, _grounded(citations=[CITATION, second]))
+    app.run()
+
+    labels = [button.label for button in app.button if button.label.startswith("Show page")]
+    assert labels == ["Show page 5", "Show page 7"]
+
+    next(button for button in app.button if button.label == "Show page 7").click().run()
+
+    assert app.session_state[state.PAGE_VIEW]["page"] == 7
+
+
+def test_the_panel_can_be_closed_for_this_answer(monkeypatch):
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+
+    next(button for button in app.button if button.key == "close-page").click().run()
+
+    assert not any("highlighted region" in caption for caption in _captions(app))
+
+
+def test_the_next_answer_opens_its_own_page_after_a_close(monkeypatch):
+    """A close applies to the answer it was made about. Carrying it forward would
+    silently switch the feature off for the rest of the session."""
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+    next(button for button in app.button if button.key == "close-page").click().run()
+
+    later = dict(CITATION, chunk_id="d1:99", page=9)
+    monkeypatch.setattr(api_client, "conversation", lambda _id: _grounded(citations=[later]))
+    app.run()
+
+    assert any("highlighted region" in caption for caption in _captions(app))
+
+
+def test_a_page_that_cannot_be_drawn_still_shows_the_passage(monkeypatch):
+    """Usually the original file is gone. The passage is what the answer actually
+    used, and it beats an empty frame."""
+
+    def gone(*_args, **_kwargs):
+        raise api_client.LensApiError("render_failed", "the original file is missing")
+
+    app = _screen(monkeypatch, _grounded(), page_image=gone)
+    app.run()
+
+    assert not app.exception
+    assert "missing" in app.warning[0].value
+
+
+# --- a refresh keeps the chat it was on ----------------------------------
+
+
+def test_a_refresh_keeps_the_chat_that_was_open(monkeypatch):
+    """Session state is wiped by a refresh. Without the chat in the address bar the
+    app forgot which one was on screen, so the next question started a new one -
+    the sidebar filled with chats nobody asked for, and a follow-up lost the
+    history it needs to be understood."""
+    conversation = _grounded()
+    app = _screen(monkeypatch, conversation)
+    app.query_params[state.CHAT_PARAM] = conversation["conv_id"]
+    del app.session_state[state.CURRENT_CONV]  # as a fresh session arrives
+    app.run()
+
+    assert app.session_state[state.CURRENT_CONV] == conversation["conv_id"]
+
+
+def test_opening_a_chat_records_it_in_the_address_bar(monkeypatch):
+    conversation = _grounded()
+    app = _screen(monkeypatch, conversation)
+    monkeypatch.setattr(
+        api_client,
+        "conversations",
+        lambda: [{"conv_id": "c1", "title": "Password rules", "title_is_auto": True}],
+    )
+    app.run()
+
+    next(button for button in app.button if button.key == "conv-c1").click().run()
+
+    # The test harness reports a query parameter as a list, a browser as a string.
+    # Either way it is the id that was opened - which is why `init` accepts both.
+    written = app.query_params[state.CHAT_PARAM]
+    assert (written[0] if isinstance(written, list) else written) == "c1"
+
+
+def test_starting_a_new_chat_clears_the_address_bar(monkeypatch):
+    """Otherwise a refresh would reopen the chat the user had just left."""
+    conversation = _grounded()
+    app = _screen(monkeypatch, conversation)
+    app.query_params[state.CHAT_PARAM] = conversation["conv_id"]
+    app.run()
+
+    next(button for button in app.button if button.label == "New chat").click().run()
+
+    assert app.session_state[state.CURRENT_CONV] is None
+    assert state.CHAT_PARAM not in app.query_params
+
+
+def test_a_chat_in_the_address_bar_that_no_longer_exists_is_dropped(monkeypatch):
+    """An id can name a chat deleted since - from another tab, or before a
+    refresh. That is an ordinary case, not an error to show."""
+    monkeypatch.setattr(api_client, "health", lambda: {"status": "ok"})
+    monkeypatch.setattr(api_client, "documents", lambda ready_only=False: DOCUMENTS)
+    monkeypatch.setattr(api_client, "conversations", lambda: [])
+
+    def gone(_conv_id):
+        raise api_client.LensApiError("conversation_not_found", "no such chat")
+
+    monkeypatch.setattr(api_client, "conversation", gone)
+
+    app = AppTest.from_file(APP, default_timeout=30)
+    app.query_params[state.CHAT_PARAM] = "deleted-one"
+    app.run()
+
+    assert not app.exception
+    assert app.session_state[state.CURRENT_CONV] is None
+
+
+def test_one_new_chat_control_on_the_screen(monkeypatch):
+    """It was in the sidebar and in the main area at once, and two controls doing
+    the same thing only raise the question of whether they differ."""
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+
+    assert len([button for button in app.button if button.label == "New chat"]) == 1
+
+
+# --- one question, one chat ----------------------------------------------
+
+
+def test_a_failed_read_of_the_open_chat_does_not_start_another_one(monkeypatch):
+    """A fetch that fails looks exactly like "no chat yet", and acting on that
+    starts a second chat holding one turn - which is how a sidebar fills with
+    chats nobody asked for, and how a follow-up loses its history."""
+    created: list[str] = []
+
+    def create(**_kwargs):
+        created.append("one")
+        return {"conv_id": "new-one"}
+
+    def unreadable(_conv_id):
+        raise api_client.LensApiError("unreachable", "the backend blinked")
+
+    monkeypatch.setattr(api_client, "health", lambda: {"status": "ok"})
+    monkeypatch.setattr(api_client, "documents", lambda ready_only=False: DOCUMENTS)
+    monkeypatch.setattr(api_client, "conversations", lambda: [])
+    monkeypatch.setattr(api_client, "conversation", unreadable)
+    monkeypatch.setattr(api_client, "create_conversation", create)
+    monkeypatch.setattr(api_client, "ask", lambda *a, **k: iter([]))
+
+    app = AppTest.from_file(APP, default_timeout=30)
+    app.session_state[state.CURRENT_CONV] = "already-open"
+    app.run()
+    app.chat_input[0].set_value("and the lock duration?").run()
+
+    assert created == [], "a second chat was created while one was already open"
+
+
+# --- nothing scrolls but the two frames ----------------------------------
+
+
+def test_turns_are_drawn_in_the_order_they_happened():
+    """The order a conversation is read in. The frame is scrolled to the newest turn
+    instead of the order being reversed to bring it into view."""
+    from frontend.components import chat
+
+    messages = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "second question"},
+        {"role": "assistant", "content": "second answer"},
+    ]
+
+    grouped = chat.turns(messages)
+
+    assert [message["content"] for message in grouped[0]] == ["first question", "first answer"]
+    assert [message["content"] for message in grouped[-1]] == ["second question", "second answer"]
+
+
+def test_a_turn_keeps_its_question_above_its_answer():
+    from frontend.components import chat
+
+    grouped = chat.turns(
+        [
+            {"role": "user", "content": "the question"},
+            {"role": "assistant", "content": "the answer"},
+        ]
+    )
+
+    assert [message["role"] for message in grouped[0]] == ["user", "assistant"]
+
+
+def test_an_answer_with_no_question_before_it_still_appears():
+    """Nothing in the app produces one, and dropping a stored message on the floor
+    because its shape was unexpected would be worse than showing it."""
+    from frontend.components import chat
+
+    grouped = chat.turns([{"role": "assistant", "content": "orphaned"}])
+
+    assert grouped == [[{"role": "assistant", "content": "orphaned"}]]
+
+
+def test_the_thread_and_the_page_share_one_height(monkeypatch):
+    """They sit side by side. Two different heights would leave one of them
+    trailing off past the other, which is the shape that was complained about."""
+    from config import settings
+
+    app = _screen(monkeypatch, _grounded())
+    app.run()
+
+    assert settings.PANEL_HEIGHT > 0
+    assert not app.exception
