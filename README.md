@@ -133,7 +133,7 @@ Measured on the six sample documents:
 
 | | Result |
 |---|---|
-| Answerable questions where the expected page was retrieved | 24/24, mean rank 1.29 |
+| Answerable questions where the expected page was retrieved | 24/24, mean rank 1.25 |
 | Answerable questions answered | 24/24 |
 | Citations landing on the expected page | 24/24 |
 | Answerable questions wrongly refused | 0/24 |
