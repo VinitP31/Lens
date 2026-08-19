@@ -1,12 +1,10 @@
 """Tests for the vector store.
 
-Milvus Lite is a local file, so these run offline against a real store in a
-temporary directory. Nothing is mocked: the two things most worth proving here
-are that a second ingest does not duplicate rows and that data outlives the
-process, and neither can be proved against a fake.
+Milvus Lite is a local file, so these run offline against a real store in a temporary
+directory. The two things most worth proving - that a second ingest does not
+duplicate rows, and that data outlives the process - cannot be proved against a fake.
 
-Vectors are hand-written, not embedded. The embedding model is not under test,
-and hand-written vectors make the expected ranking obvious by eye.
+Vectors are hand-written, so the expected ranking is obvious by eye.
 """
 
 import pytest
@@ -121,11 +119,10 @@ def test_chunks_survive_reopening_the_store(tmp_path):
 def test_a_released_collection_is_loaded_again_on_connect(tmp_path):
     """A real restart, not just a second handle in the same process.
 
-    Milvus hands back an existing collection in a released state, and a released
-    collection refuses every search. The plain reopen test above passes while this
-    is broken, because a collection created in this process is still loaded - so
-    the fault only appears on the second run of the application, which is every
-    run after the first.
+    Milvus hands back an existing collection released, and a released collection
+    refuses every search. The reopen test above passes while this is broken, because a
+    collection created in this process is still loaded - so the fault appears only from
+    the second run of the application onward.
     """
     path = tmp_path / "chunks.db"
     first = vector_store.connect(path)

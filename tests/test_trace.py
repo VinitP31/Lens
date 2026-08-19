@@ -1,13 +1,9 @@
 """Tests for the trace log.
 
-Two things are being protected.
-
-Both scores are written for every retrieved chunk. Confusing a Milvus distance
-with a similarity is the most expensive mistake available in this system, and a
-line showing them side by side is what settles the question in seconds.
-
-A trace never breaks the thing it describes. A diagnostic that can fail a request
-is worse than no diagnostic, so an unwritable path is swallowed.
+Two things are protected. Both scores are written for every retrieved chunk, because
+confusing a Milvus distance with a similarity is the most expensive mistake available
+here. And a trace never breaks the thing it describes, so an unwritable path is
+swallowed.
 """
 
 import json
@@ -60,7 +56,7 @@ def test_a_query_is_written_as_one_line(tmp_path, monkeypatch):
 
 
 def test_both_scores_are_recorded_for_every_chunk(tmp_path, monkeypatch):
-    """The whole reason this file exists in the shape it does. Milvus names its
+    """Every retrieved chunk records both its similarity and its raw score. Milvus names its
     score `distance` while cosine makes it a similarity, and reading it the wrong
     way up builds a system that answers on nonsense and refuses real questions."""
     use_tmp(tmp_path, monkeypatch)

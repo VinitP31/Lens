@@ -1,13 +1,11 @@
 """Tests for turning a cited page into a picture.
 
-The thing worth protecting here is that a highlight lands on the words it names.
-A box drawn in the wrong place is worse than no box at all: the user is shown a
-sentence and told it is the source, which is exactly the failure this whole
-product exists to prevent.
+A highlight has to land on the words it names. A box in the wrong place is worse than
+no box: the user is shown a sentence and told it is the source.
 
-So these tests check pixels. A box over known text must darken that region and
-leave the rest of the page alone, and a box that does not belong on the page must
-not be moved onto words that were never cited.
+So these tests check pixels. A box over known text must darken that region and leave
+the rest alone, and a box that does not belong on the page must not be moved onto
+words that were never cited.
 """
 
 import pymupdf

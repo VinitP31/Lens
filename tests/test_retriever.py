@@ -1,13 +1,10 @@
 """Tests for retrieval.
 
-A real registry and a real vector store, with hand-written vectors and a
-stand-in embedder, so the suite stays offline and every expected ranking is
-obvious by eye.
+A real registry and vector store with hand-written vectors, so the suite stays
+offline and every expected ranking is obvious by eye.
 
-What is under test is the scoping, the over-fetch, and the deduplication. Whether
-the chunks are good enough to answer is the gate's job, and whether the model
-uses them well is generation's - both deliberately out of scope here so retrieval
-can be measured on its own.
+Under test: scoping, over-fetch, deduplication. Whether the chunks are good enough
+is the gate's job, and whether the model uses them well is generation's.
 """
 
 import pytest

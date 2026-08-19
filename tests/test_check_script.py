@@ -44,8 +44,10 @@ def test_a_passing_check_writes_nothing(log_path):
 
 
 def test_the_log_holds_output_the_console_cut_off(log_path):
-    """The reason this exists. The console keeps 25 lines; the first line of a long
-    failure is exactly the one that names the cause."""
+    """Output the console cut off still reaches the log file.
+
+    The console keeps 25 lines, and the first line of a long failure is the one that
+    names the cause."""
     script = "import sys\nfor n in range(200): print(f'line {n}')\nsys.exit(1)"
 
     check._run("probe", [sys.executable, "-c", script])

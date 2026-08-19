@@ -1,13 +1,10 @@
 """Tests for the screen.
 
-The backend is stubbed, so nothing here starts a server or spends money. What is
-real is Streamlit: the app script is executed by `AppTest`, so a rerun bug, a
-duplicate widget key or an exception in a component shows up here rather than in
-the browser.
+The backend is stubbed, so nothing starts a server or spends money. Streamlit is
+real: the app script runs under `AppTest`, so a rerun bug, a duplicate widget key or
+an exception in a component shows up here rather than in the browser.
 
-The upload guard is the most important test in this file. Streamlit hands the same
-file back on every rerun, and a rerun happens on every click, so without the guard
-one upload is sent four or five times and each attempt pays for embeddings.
+The upload guard is the most important test in this file.
 """
 
 from pathlib import Path
@@ -550,12 +547,11 @@ def test_a_failed_delete_is_reported_and_leaves_the_chat_alone(monkeypatch, back
 
 def test_the_app_script_runs_when_launched_the_way_streamlit_launches_it(tmp_path):
     """Streamlit puts the script's own directory on the import path, not the one it
-    was launched from. Without the path line at the top of `app.py`, every import of
-    `frontend.…` fails and the page shows a traceback instead of a chat - while the
-    server still answers 200, so a status check does not catch it.
+    was launched from, so without the path line in `app.py` the page shows a traceback
+    while the server still answers 200.
 
-    Run in a subprocess from an unrelated directory, with nothing added to the
-    import path, because that is the only arrangement in which the bug appears.
+    Run in a subprocess from an unrelated directory, because that is the only
+    arrangement in which the bug appears.
     """
     import os
     import subprocess
@@ -647,7 +643,7 @@ def test_a_table_stored_as_one_line_still_reads_as_a_table():
 
 
 def test_the_truncation_mark_is_not_shown_as_a_row():
-    """It is a message about the table, not a line of it."""
+    """The truncation mark is a message about the table, not a row of it."""
     from config import settings
 
     snippet = (
@@ -879,8 +875,10 @@ def test_a_chat_in_the_address_bar_that_no_longer_exists_is_dropped(monkeypatch)
 
 
 def test_one_new_chat_control_on_the_screen(monkeypatch):
-    """It was in the sidebar and in the main area at once, and two controls doing
-    the same thing only raise the question of whether they differ."""
+    """One New chat control, not two.
+
+    It was in the sidebar and in the main area at once, and two controls doing the
+    same thing only raise the question of whether they differ."""
     app = _screen(monkeypatch, _grounded())
     app.run()
 

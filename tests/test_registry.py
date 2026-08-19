@@ -65,7 +65,7 @@ def test_two_documents_get_different_ids(db):
 
 
 def test_the_same_bytes_are_rejected_as_a_duplicate(db):
-    """The whole point of the content hash. Two copies of one PDF would put two
+    """The same bytes under any name are one document. Two copies of one PDF would put two
     identical citations on every answer, which reads as a broken system."""
     first = add(db, content_hash="same-bytes")
 

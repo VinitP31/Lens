@@ -1,13 +1,10 @@
 """Tests for grounded generation.
 
-The model call is injected, so nothing here touches the network. Every test
-supplies the exact reply it depends on, which is the only way to test the three
-outcomes without asserting on wording that varies between runs.
+The model call is injected and every test supplies the exact reply it depends on,
+which is the only way to test the outcomes without asserting on wording.
 
-The three outcomes are the whole point: an answer, an abstention, and a failure.
-Conflating any two of them misinforms the user, and the last one especially -
-reporting an outage as "your documents do not cover this" would be a lie in the
-one place this system exists not to tell one.
+The three outcomes are the point - an answer, an abstention, and a failure.
+Reporting an outage as "your documents do not cover this" would be a lie.
 """
 
 import pytest
@@ -118,7 +115,7 @@ def test_an_abstention_carries_no_text():
 
 
 def test_an_answer_citing_only_invented_sources_becomes_an_abstention():
-    """It cannot be checked against anything, which is the state this system
+    """An answer whose every citation was invented becomes a refusal, because it
     exists to avoid. Shown as "I don't know", not as an answer with no sources."""
     result = generator.generate("A question", [hit()], NAMES, chat=replying("Certainly true [4]."))
 

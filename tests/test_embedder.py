@@ -86,12 +86,10 @@ def test_order_survives_being_split_across_batches(monkeypatch):
 
 
 def test_the_real_client_reorders_a_response_by_its_reported_index(monkeypatch):
-    """The provider is not required to answer in request order; each result
-    carries its own index. Trusting arrival order would pair every chunk with
-    another chunk's vector and raise nothing.
+    """Each result carries its own index, and the provider need not answer in order.
 
-    This drives the real client function, with the network replaced rather than
-    the logic under test.
+    Trusting arrival order would pair every chunk with another chunk's vector and
+    raise nothing. Drives the real client, with only the network replaced.
     """
 
     class Item:

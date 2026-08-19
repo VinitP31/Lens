@@ -62,7 +62,7 @@ def test_the_instructions_never_mention_a_document_from_the_corpus():
 
 
 def test_the_abstention_marker_is_the_one_code_checks_for():
-    """Two copies of this string that drift apart would produce a system that
+    """The prompt asks for the exact marker code checks for. Two copies that drift
     abstains and then reports the abstention to the user as an answer."""
     assert settings.ABSTENTION_MARKER in prompt.SYSTEM_PROMPT
 

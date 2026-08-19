@@ -1,12 +1,10 @@
 """Shared test fixtures.
 
-PDFs used by tests are generated here with PyMuPDF rather than committed as
-binary files. A generated PDF has known content on a known page, so a test can
-assert exactly where text ended up. A real-world PDF can only be asserted
-against whatever it happens to contain, which tests nothing in particular.
+PDFs are generated with PyMuPDF rather than committed as binaries: a generated PDF has
+known content on a known page, so a test can assert exactly where text ended up.
 
-The sample PDFs in samples/ are for reading by eye and for evaluation. They are
-never used in unit tests.
+The sample PDFs in samples/ are for reading by eye and for evaluation, never for unit
+tests.
 """
 
 from pathlib import Path
@@ -239,10 +237,9 @@ SCANNED_LINES = [
 def _as_image_page(document, draw) -> None:
     """Add a page that is a picture of whatever `draw` puts on it.
 
-    The text is drawn on a scratch page, rendered to a bitmap, and the bitmap
-    becomes the real page - so what survives is pixels and nothing else. This is
-    what a photocopier or a phone camera produces, and it is the only honest way
-    to test the OCR path.
+    Drawn on a scratch page, rendered to a bitmap, and the bitmap becomes the page, so
+    what survives is pixels only - what a photocopier produces, and the only honest
+    way to test the OCR path.
     """
     scratch = pymupdf.open()
     temporary = scratch.new_page(width=612, height=792)

@@ -1,4 +1,9 @@
-"""Tests for backend.errors."""
+"""Tests for the error codes.
+
+Every failure in Lens carries a short code, and the UI decides what to show from that
+code alone. These check the codes are present, unique, and unchanged - renaming one
+silently changes which message a user sees.
+"""
 
 from backend import errors
 from backend.errors import EmptyDocumentError, ExtractionFailedError, LensError

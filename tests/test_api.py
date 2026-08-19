@@ -1,13 +1,11 @@
 """Tests for the HTTP layer.
 
-A real app against real stores in a temporary directory. The model calls and the
-extraction worker are replaced, so nothing here costs money or spawns Docling,
-but SQLite and Milvus are the actual ones - a rejection has to be shown coming
-back as the right status with the right code, and a mock would agree with
-anything.
+A real app against real stores in a temporary directory. Model calls and the
+extraction worker are replaced, but SQLite and Milvus are the actual ones - a mock
+would agree with anything.
 
-The rejection codes are the point. The UI switches on `code` and never on
-`message`, so these tests assert on the code and the status, never on wording.
+The rejection codes are the point: these assert on the code and the status, never on
+wording, because that is what the UI switches on.
 """
 
 import json

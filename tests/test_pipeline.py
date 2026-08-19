@@ -1,14 +1,11 @@
 """End-to-end tests across the whole ingest path.
 
-Every other test file covers one module. These cover the seams between them,
-which is where the failures that matter actually live: a change to `Element`'s
-shape, or to what `Chunk` carries, can break ingestion while every unit test
-stays green.
+Every other file covers one module; these cover the seams, which is where the
+failures that matter live - a change to what `Chunk` carries can break ingestion
+while every unit test stays green.
 
-The path is validate (by hash) -> extract -> chunk -> embed -> store -> mark
-ready. Every stage is the real module. Only the network inside the embedder is
-replaced, by a deterministic stand-in, so the suite stays free and offline while
-still exercising the embedder's batching, ordering and validation.
+validate -> extract -> chunk -> embed -> store -> ready, with every stage the real
+module. Only the network inside the embedder is replaced.
 """
 
 import hashlib
@@ -177,7 +174,7 @@ def test_everything_survives_reopening_both_stores(tmp_path, simple_pdf):
     assert stored == len(chunks)
 
 
-# --- Provenance survives the whole path ----------------------------------
+# --- pages and coordinates survive the whole path ------------------------
 
 
 def test_a_searched_chunk_still_knows_its_page_and_boxes(stores, simple_pdf):

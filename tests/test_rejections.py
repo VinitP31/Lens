@@ -1,13 +1,11 @@
 """The full rejection matrix, end to end over HTTP.
 
-Each row of the table in the specification, checked as a user would meet it: an
-upload, a status code, and a stable code the UI switches on. Individual pieces are
-tested closer to the code elsewhere; this file exists so that a row of the matrix
-cannot quietly stop working while its unit test still passes.
+Each row of the specification's table, met as a user meets it: an upload, a status
+code, and a stable code the UI switches on. The pieces are tested closer to the code
+elsewhere; this file exists so a row cannot quietly stop working.
 
-Every case here is a rejection rather than a crash. A refused file is an ordinary
-outcome the user can act on, so each one must arrive immediately, name its reason,
-and leave the library exactly as it was.
+Every case is a rejection rather than a crash: immediate, named, and leaving the
+library exactly as it was.
 """
 
 import pymupdf

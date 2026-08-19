@@ -1,10 +1,11 @@
 """Tests for citation validation.
 
-This is the module that makes the product's central claim true, so the tests are
-about what code refuses to resolve rather than about what the model wrote.
+The model cites a number and code resolves it, so these tests are about what code
+refuses: a number that was never supplied, a malformed reference, a reply citing
+nothing at all.
 
-Nothing here asserts on answer wording. Every case constructs a reply as a string
-and checks what validation does with it.
+Nothing asserts on answer wording. Each case builds a reply as a string and checks what
+validation does with it.
 """
 
 from backend.retrieval import citations

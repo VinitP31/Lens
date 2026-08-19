@@ -1,7 +1,10 @@
-"""Tests for backend.ingestion.extractor.
+"""Tests for reading a PDF into text with page numbers and coordinates.
 
-Extraction is slow (seconds per page), so each PDF is converted once per session
-and the result is shared across assertions.
+The most important test here is page attribution: text known to be on page 3 must be
+reported as page 3. An off-by-one page map makes every citation quietly wrong.
+
+Extraction takes seconds per page, so each PDF is converted once per session and the
+result shared across assertions.
 """
 
 import pytest
@@ -594,10 +597,9 @@ def test_a_value_beside_its_label_is_joined():
 def test_columns_a_page_apart_are_not_joined():
     """The boundary of this rule, stated so it is not mistaken for a bug.
 
-    A wide two-column grid - label at the left margin, value near the right -
-    is left alone. Anything on the same line would qualify at that distance,
-    including two unrelated cells of a three-column row, and inventing a pairing
-    is worse than leaving one unstated.
+    A wide grid - label at the left margin, value near the right - is left alone: at
+    that distance any two cells on a line would qualify, and inventing a pairing is
+    worse than leaving one unstated.
     """
     joined = extractor._with_paired_values(
         [_line("Fees", 72.0, 300.0), _line("30 pts", 400.0, 300.0)]

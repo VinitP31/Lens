@@ -1,14 +1,11 @@
 """Tests for chunking.
 
-Elements are built directly here rather than extracted from a PDF. Chunking is
-pure logic over the extractor's output, so constructing that output by hand is
-both faster and more precise: a test can state exactly how many tokens an
-element holds and assert exactly where the boundary landed.
+Elements are built by hand rather than extracted from a PDF: chunking is pure logic
+over the extractor's output, so a test can state exactly how many tokens an element
+holds and assert exactly where the boundary landed.
 
-A word counter stands in for the real tokenizer. The suite then runs offline
-and instantly, and every size in these tests is countable by eye. The real
-tokenizer is exercised separately in one test that only checks it agrees about
-ordering, never about exact numbers.
+A word counter stands in for the tokenizer, so every size here is countable by eye.
+The real tokenizer is exercised in one test, about ordering only.
 """
 
 from backend.ingestion import chunker
@@ -116,12 +113,11 @@ def test_the_same_heading_far_apart_is_not_joined():
 
 
 def test_a_contents_page_is_never_indexed():
-    """Found by the corpus audit, not by any unit test: the extractor marks
-    contents pages and the profiler printed "excluded from indexing", but nothing
-    excluded them, so four of six sample documents had one in the index.
+    """Found by the corpus audit, not by any unit test.
 
-    A contents page holds the vocabulary of every topic and the answer to none,
-    so it scores respectably against many questions and satisfies none."""
+    The extractor marked contents pages and the profiler printed "excluded from
+    indexing", but nothing excluded them - four of six sample documents had one in
+    the index, scoring respectably against many questions and answering none."""
     chunks = chunker.chunk(
         document(
             [
@@ -407,7 +403,7 @@ def test_a_table_does_not_leak_into_the_next_chunk_as_overlap():
     assert "| Director |" not in chunks[1].text
 
 
-# --- Provenance ----------------------------------------------------------
+# --- pages and coordinates -----------------------------------------------
 
 
 def test_page_and_boxes_are_carried_through():

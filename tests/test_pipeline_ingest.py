@@ -1,13 +1,11 @@
-"""Tests for ingestion orchestration.
+"""Tests for the ingestion pipeline: stage order, status, and rollback.
 
-The claim being tested is the one the library's honesty depends on: a document is
-either wholly indexed or wholly absent. Never partly there, answering some
-questions and silently skipping the rest of its own content.
+One rule is under test: a document ends up wholly indexed or wholly absent, never
+partly there answering some questions and silently skipping the rest.
 
-Extraction is injected, so nothing here spawns a worker or loads Docling, and the
-embedding function is a stand-in, so nothing costs money. What is real is the
-SQLite registry and the Milvus store - the rollback has to be shown removing rows
-from the actual stores, not from mocks that would agree with anything.
+Extraction and embedding are injected, so nothing spawns a worker or costs money. The
+registry and the vector store are real - a rollback has to be shown removing rows from
+the actual stores, not from mocks that would agree with anything.
 """
 
 import pymupdf
@@ -259,8 +257,8 @@ def test_a_document_yielding_no_chunks_is_rolled_back(stores):
 
 
 def test_a_rollback_leaves_other_documents_untouched(stores):
-    """One document failing must never affect another. This is the whole reason
-    ingestion is per-document rather than per-batch."""
+    """One document failing must never affect another, which is why ingestion is
+    per-document rather than per-batch."""
     db, store = stores
     good = pipeline.accept(db, pdf_bytes(1), "good.pdf")
     pipeline.ingest(
@@ -354,12 +352,11 @@ def test_recovery_on_a_clean_library_does_nothing(stores):
 
 
 def test_chunks_already_written_are_removed_when_a_later_step_fails(stores, monkeypatch):
-    """The only case that exercises chunk removal, and the one that matters most.
+    """The only case that exercises chunk removal.
 
-    Everything else fails before anything is written. Here the chunks are in the
-    index and the failure comes after, so a rollback that forgot them would leave
-    passages that are still retrieved and cited from a document the library no
-    longer lists.
+    Everything else fails before anything is written. Here the chunks are indexed and
+    the failure comes after, so a rollback that forgot them would leave passages still
+    retrieved from a document the library no longer lists.
     """
     db, store = stores
     accepted = pipeline.accept(db, pdf_bytes(), "handbook.pdf")

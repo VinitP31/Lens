@@ -62,7 +62,9 @@ def test_a_repeated_document_is_stored_once(db):
 
 
 def test_an_empty_subset_is_refused(db):
-    """It would refuse every question, which reads as broken rather than chosen."""
+    """A chat with no documents selected is refused when it is created.
+
+    Stored, it would refuse every question, which reads as broken rather than chosen."""
     with pytest.raises(EmptyScopeError):
         conversations.create(db, scope_mode=conversations.SCOPE_SUBSET, scope_doc_ids=[])
 

@@ -21,11 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_the_parent_process_never_loads_docling():
-    """The whole reason this module exists.
+    """Importing the worker must not pull Docling into this process.
 
-    Docling and Milvus Lite each bundle a copy of the OpenMP runtime, and a
-    process that initialises both aborts. Importing the worker must not drag one
-    in alongside the other.
+    Docling and Milvus Lite each bundle a copy of the OpenMP runtime, and a process
+    that initialises both aborts. This is the reason the worker is a separate program.
     """
     probe = (
         "import sys;"
@@ -107,13 +106,11 @@ def test_a_missing_file_is_reported_rather_than_hanging(tmp_path):
 
 
 def test_a_worker_that_overruns_is_stopped(monkeypatch, simple_pdf):
-    """A hung worker holds a Docling model and several hundred megabytes, so the
-    parent must give up on it rather than wait forever.
+    """A hung worker holds a Docling model and several hundred megabytes.
 
-    The outcome is asserted, not the wording. At this timeout the parent stops the
-    child during the child's own startup, so two correct reports race: the
-    deadline passing, and the child being found already dead. Pinning either
-    message would make this test fail on a busy machine for no real reason.
+    The outcome is asserted, not the wording: at this timeout the parent stops the
+    child during its startup, so two correct reports race - the deadline passing, and
+    the child found already dead.
     """
     monkeypatch.setattr(settings, "EXTRACT_TIMEOUT_SECONDS", 0.01)
 
@@ -122,12 +119,9 @@ def test_a_worker_that_overruns_is_stopped(monkeypatch, simple_pdf):
 
 
 def test_nothing_on_the_query_side_can_reach_docling():
-    """The same rule as the probe above, checked by reading the imports rather than
-    by running anything.
+    """The same rule as the probe above, read from the imports rather than run.
 
-    The probe proves it for one process on one machine. This proves it for the
-    import graph, cannot be upset by whatever else is running, and says which file
-    broke the rule when it fails.
+    Cannot be upset by whatever else is running, and names the file that broke it.
     """
     import ast
 
