@@ -218,7 +218,7 @@ Extraction sits in a process of its own, not for tidiness but because Docling an
 
 **Things become testable.** A backend with an HTTP contract can be tested without starting Streamlit.
 
-**FastAPI and LangChain are also part of the required stack**, so this isn't extra work invented for its own sake.
+**FastAPI is also part of the required stack**, so this isn't extra work invented for its own sake. LangChain is in the brief too, and was attempted and dropped for a measured reason — see D-32.
 
 ### Three stores, three jobs
 
@@ -240,7 +240,7 @@ Originals must be kept because citations render the source page. Making one stor
 |---|---|---|---|
 | Python | 3.11 / 3.12 | Latest release | Wheels exist for every dependency. Newest versions force source builds |
 | Backend | FastAPI | Flask, Django | Async, background tasks, request validation from type hints, all built in |
-| Orchestration | LangChain | Direct SDK calls | Standard pieces for retrieval chains and chat history |
+| Orchestration | The OpenAI SDK directly | LangChain | `langchain-openai` imports torch, whose OpenMP runtime is a second copy beside the one Milvus Lite embeds, and a process holding both aborts on the first call. Measured — see D-32 |
 | PDF processing | Docling | PyMuPDF + pdfplumber, hosted APIs | Only local, free option that returns page **and coordinates** for every element. Also does tables, reading order, header removal, and OCR |
 | Page rendering | PyMuPDF | Embedded PDF viewer | Browsers ignore page anchors inside iframes. Rendering to an image works everywhere and can draw a highlight box |
 | Vector store | Milvus | Chroma, FAISS | Same client for the local file and a server, so no migration later. FAISS stores only vectors, so you'd need a separate metadata store and no filtered search |
@@ -1629,6 +1629,9 @@ The condenser and the rewrite both restate a question, and both were measured dr
 
 **D-31 · The two stores must agree at startup.**
 The registry and the vector store are separate files with nothing keeping them in step: delete one, restore one from a backup, or fill the disk mid-write, and the library still lists documents whose text is gone. Measured by accident during testing — the backend started reporting `status ok, 6 documents, 0 chunks` and would have refused every question with no explanation available to the user. So a registry expecting chunks against an empty store now refuses to start. *Rejected:* comparing exact counts, which would refuse a healthy library because soft-deleted documents keep their chunks and a reingest upserts; repairing automatically, which would mean deciding on the user's behalf which store is right. *Costs:* one check and a re-index when it fires.
+
+**D-32 · The OpenAI SDK directly, not LangChain.**
+LangChain is named in the brief and was implemented: all four model calls — embeddings, the two utility calls, and the streaming answer — went through `langchain-openai`, tests and all. It aborts the process. Milvus Lite runs embedded and bundles libomp inside FAISS; `langchain-openai` imports transformers, which imports torch, which brings a second copy, and the result is the same `OMP: Error #15` that already forces extraction into its own process (D-27). The backend accepted a question, returned 200, and died mid-answer. Worse than a clean failure: the evaluation script survived the same change, so the fault would have appeared in some paths and not others. What LangChain would have replaced was four thin SDK calls — chunking, retrieval, scope filtering, the refusal gate and citation validation are ours by design, so no measured number would have moved. *Rejected:* `KMP_DUPLICATE_LIB_OK=TRUE`, documented by OpenMP itself as unsafe and able to produce silently wrong results, which is the one thing this product exists to prevent; a subprocess per model call, which ends token streaming; swapping Milvus for Chroma to suit a wrapper, which reverses D-09 and re-engineers the store. *Costs:* one named stack item is not used, with this record as the reason. `langchain-core` alone pulls nothing heavy and stays available if the dependency is ever wanted.
 
 ---
 
