@@ -59,7 +59,15 @@ passage, and a rewrite without them retrieves the general topic instead of the \
 specific fact.
 - Do not summarise, shorten or tidy. Filling in what a message leaves out is the \
 whole job; removing what it says is not.
-- If the message already stands on its own, repeat it unchanged.
+- A message can read as a whole sentence and still depend on the conversation. \
+"What does the covenant require?" names a thing the previous turn introduced, and \
+searched on its own it finds nothing. Whenever the conversation says which \
+company, document, system, section, period or figure the message is about, put \
+that into the rewrite even when the message reads as complete without it.
+- Use the words the conversation used for a thing, in full. If the previous turn \
+said "the 100 evaluation points", write that, not "points": the qualifier is what \
+finds the passage.
+- Only repeat a message unchanged when the conversation adds nothing to it.
 - If it is a greeting or about the application, repeat it unchanged.
 - Keep the user's own words wherever they still make sense.
 
