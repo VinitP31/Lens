@@ -1,12 +1,9 @@
 """The documents drawer: what is in the library, add, remove.
 
-A drawer rather than a permanent panel. Documents are managed occasionally and
-read from constantly, so they get space when asked for and none the rest of the
-time - which is also why the sidebar holds only history.
+A drawer rather than a permanent panel: documents are managed occasionally and read
+from constantly, so they get space only when asked for.
 
 Uploading from here changes the library and never the current chat's selection.
-A user who opens the drawer is managing documents, not deciding what this
-conversation searches.
 """
 
 import streamlit as st

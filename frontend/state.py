@@ -25,16 +25,12 @@ SCOPE_DRAFT = "scope_draft"
 # A message the screen should show once, after a rerun caused by an action.
 NOTICE = "notice"
 
-# Which chat is waiting on a "are you sure?" before being deleted. Lives here
-# rather than in the sidebar module because everything that state survives a
-# rerun has to be a session key.
+# Which chat is waiting on a "are you sure?". Here rather than in the sidebar,
+# because anything surviving a rerun has to be a session key.
 DELETE_ARMED = "delete_armed"
 
-# The page shown beside the thread is chosen by the answer, not by a click: the
-# newest answer's first source appears there on its own. These two keys record the
-# reader overruling that - opening a different source, or closing the panel - and
-# both are cleared when the next answer arrives, because that answer cites
-# something else.
+# The page beside the thread is chosen by the answer, not by a click. These keys
+# record the reader overruling that, and both clear when the next answer arrives.
 PAGE_VIEW = "page_view"  # a source the reader opened instead
 PAGE_CLOSED = "page_closed"  # the automatic page they dismissed
 PAGE_ANCHOR = "page_anchor"  # which answer those two were about
@@ -52,10 +48,9 @@ DEFAULTS = {
 }
 
 
-# Which chat is open, kept in the address bar. Session state is wiped by a
-# refresh, and without this the app forgot which chat was on screen: the next
-# question started a brand new one, so the sidebar filled with chats the user
-# never asked for and a follow-up lost the history it needed to be understood.
+# Which chat is open, kept in the address bar. Session state is wiped by a refresh,
+# and without this the next question started a brand new chat - so the sidebar filled
+# up and a follow-up lost the history it needed.
 CHAT_PARAM = "chat"
 
 
@@ -71,9 +66,8 @@ def init() -> None:
     # this is what carries the open chat across one.
     if st.session_state[CURRENT_CONV] is None:
         from_url = st.query_params.get(CHAT_PARAM)
-        # A repeated parameter arrives as a list. Taking the first is what a
-        # browser does with `?chat=a&chat=b`, and passing a list on as an id would
-        # fail deep inside the API client instead of here.
+        # A repeated parameter arrives as a list, as with `?chat=a&chat=b`. Passing
+        # one on as an id would fail deep inside the API client instead of here.
         if isinstance(from_url, list):
             from_url = from_url[0] if from_url else None
         if from_url:
@@ -92,13 +86,11 @@ def open_chat(conv_id: str | None) -> None:
 def already_sent(data: bytes) -> bool:
     """Whether this exact file has already been sent from this session.
 
-    `st.file_uploader` returns the same file again on every rerun, and a question
-    or a button press causes a rerun. Without this, one upload is sent four or
-    five times, and each attempt pays for embeddings before the backend's own
-    hash check rejects it.
+    `st.file_uploader` returns the same file on every rerun, and anything clicked
+    causes a rerun, so without this one upload is sent four or five times and each
+    attempt pays for embeddings.
 
-    Both guards are needed. This one stops the request being made; the backend's
-    stops a duplicate being indexed if it arrives anyway.
+    This stops the request; the backend's hash check stops a duplicate being indexed.
     """
     digest = hashlib.sha256(data).hexdigest()
     if digest in st.session_state[SENT_UPLOADS]:

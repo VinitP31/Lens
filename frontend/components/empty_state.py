@@ -1,11 +1,8 @@
 """What the screen says before there is anything to search.
 
-The user never leaves the chat screen. There is no home page and no setup step -
-an empty library is the chat screen with the input switched off and one clear
-thing to do.
-
-The alternative, a separate welcome page, means the first thing anyone learns is
-a screen they will never see again.
+No home page and no setup step: an empty library is the chat screen with the input
+switched off and one clear thing to do. A separate welcome page would make the first
+thing anyone learns a screen they never see again.
 """
 
 import streamlit as st

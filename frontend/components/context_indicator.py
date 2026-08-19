@@ -1,12 +1,10 @@
 """What is being searched, shown above the thread and editable there.
 
-This is always visible for one reason: the same question against a different
-selection gives a different answer, and a user who cannot see the selection has
-no way to understand why. A refusal in particular is only interpretable if you
-know what was searched.
+Always visible because the same question against a different selection gives a
+different answer, and a refusal is only interpretable if you know what was searched.
 
-Three display states, per the spec: the whole library, one named document, or the
-first name and how many others.
+Three display states: the whole library, one named document, or the first name and
+how many others.
 """
 
 import streamlit as st

@@ -1,13 +1,11 @@
 """The only part of the frontend that talks to the backend.
 
-Everything the UI needs comes through here over HTTP, so no screen can reach into
-the database and the two halves can be run and restarted separately.
+Everything the UI needs comes through here over HTTP, so no screen can reach into the
+database and the two halves restart independently.
 
-Errors arrive as a code and a message: callers switch on `LensApiError.code`, never
-on its text. Answers arrive as a stream of events - text, then the validated
-citations once generation has finished, then the diagnostics - so `ask` yields the
-text as it comes and returns the rest at the end, which is the shape
-`st.write_stream` wants.
+Errors arrive as a code and a message: callers switch on `LensApiError.code`, never on
+its text. Answers arrive as a stream, so `ask` yields text as it comes and returns the
+citations and diagnostics at the end.
 """
 
 from collections.abc import Iterator
@@ -121,10 +119,8 @@ def status(doc_id: str) -> dict:
 def page_image(doc_id: str, page: int, chunk_id: str | None = None) -> bytes:
     """A PNG of one page, with the cited region highlighted.
 
-    Returns the bytes rather than a URL so the image travels through the same
-    client as everything else - the screen never builds a backend URL of its own,
-    which is what keeps this module the only thing that knows where the backend
-    is.
+    Returns bytes rather than a URL, so the screen never builds a backend address of
+    its own.
     """
     try:
         with _client() as client:
@@ -212,13 +208,10 @@ def _patch_json(path: str, payload: dict) -> dict:
 def ask(conv_id: str, message: str) -> Iterator[str | Answer]:
     """Send a turn. Yields the answer text in pieces, then one `Answer`.
 
-    The mixed yield type is deliberate: `st.write_stream` consumes the strings as
-    they arrive, and the final `Answer` carries the citations and diagnostics,
-    which cannot exist until generation has finished.
+    The mixed yield type is deliberate: `st.write_stream` consumes the strings, and the
+    final `Answer` carries citations that cannot exist until generation finished.
 
-    A refusal yields no text at all, only the `Answer`. That lets the screen
-    render it as its own calm state rather than as an answer that happens to say
-    no.
+    A refusal yields no text at all, so the screen can render it as its own state.
     """
     import json
 

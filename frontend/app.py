@@ -2,22 +2,20 @@
 
     streamlit run frontend/app.py
 
-Chat-first: this opens straight into a conversation, and an empty library is the
-same screen with the input switched off.
+Chat-first: it opens straight into a conversation, and an empty library is the same
+screen with the input switched off.
 
-Streamlit re-runs this whole file on every interaction, so nothing may be
-remembered between runs except transient UI state. The database is the only thing
-that is always right.
+Streamlit re-runs this file on every interaction, so nothing is remembered between
+runs except transient UI state.
 """
 
 import sys
 from pathlib import Path
 
-# Streamlit puts the script's own directory on the import path, not the directory
-# it was launched from, so `frontend.api_client` is not importable by default and
-# the app fails on its first import with no clue as to why. Added here rather than
-# asked of the reader as a PYTHONPATH: `streamlit run frontend/app.py` is the
-# command everyone will type, and it has to work.
+# Streamlit puts the script's own directory on the import path, not the one it was
+# launched from, so `frontend.api_client` is not importable and the app dies on its
+# first import. Here rather than asked of the reader as a PYTHONPATH, because
+# `streamlit run frontend/app.py` is the command everyone types.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st  # noqa: E402
@@ -37,16 +35,12 @@ from frontend.components import (
 # two columns in a centred page leave neither of them readable.
 st.set_page_config(page_title="Lens", layout="wide")
 
-# How the width is split when a page is open. The thread keeps the larger share:
-# the answer is what is being read, and the page is what is being checked against
-# it.
-# The page panel is a fixed frame now, so the thread keeps most of the width and
-# the panel takes what it needs and no more.
+# How the width is split when a page is open. The thread keeps most of it: the
+# answer is what is read, the page is what it is checked against.
 THREAD_SHARE, PAGE_SHARE = 1.6, 1.0
 
-# Without a page open the thread would otherwise stretch to the full window, and
-# a line of text that long is hard to read. Empty columns either side hold it to
-# a comfortable measure.
+# With no page open, empty columns either side hold the thread to a readable
+# measure rather than the full window width.
 MARGIN_SHARE = 0.5
 
 
@@ -97,16 +91,14 @@ def main() -> None:
     with thread_column:
         context_indicator.render(conversation, documents)
 
-        # Documents only. "New chat" lives in the sidebar beside the chat list,
-        # where the rest of the chat controls are, and having it twice on one
-        # screen only raises the question of whether the two differ.
+        # Documents only. "New chat" lives in the sidebar with the chat list, and
+        # having it twice raises the question of whether the two differ.
         if st.button("Documents", width="stretch"):
             documents_drawer.open_drawer(documents)
 
-        # A frame of its own, the same height as the page panel beside it. The
-        # window itself does not scroll: left to grow, the thread moved the whole
-        # page under the reader on every answer, so a question could be half in
-        # view and its answer half out of it.
+        # A frame of its own, the same height as the page panel beside it, so the
+        # window does not scroll: left to grow, every answer moved the whole page
+        # under the reader.
         thread_frame = st.container(height=settings.PANEL_HEIGHT, border=False)
 
     if viewing and page_column is not None:
@@ -114,8 +106,7 @@ def main() -> None:
             citations.page_panel(viewing)
 
     # Outside the columns on purpose: Streamlit pins a top-level chat input to the
-    # bottom of the window, and one nested in a column scrolls away with the
-    # thread.
+    # bottom, and one nested in a column scrolls away with the thread.
     question = st.chat_input("Ask about your documents")
 
     # Filled last so the streamed answer lands at the end of the thread, where the

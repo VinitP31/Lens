@@ -1,11 +1,10 @@
 """The message thread, and asking a question.
 
-The thread is redrawn from the backend on every rerun, because Streamlit re-runs
-the whole script whenever anything is clicked.
+Redrawn from the backend on every rerun, because Streamlit re-runs the whole script
+whenever anything is clicked.
 
-An answer arrives as a stream and `st.write_stream` consumes it, but the last piece
-is not text - it is the finished answer with its citations, which cannot exist until
-the model has stopped citing. So the stream is wrapped and that object kept back.
+The last piece of a streamed answer is not text but the finished answer with its
+citations, so the stream is wrapped and that object kept back.
 """
 
 import streamlit as st
@@ -88,11 +87,9 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
     conversation with no messages is a row nobody asked for, and it would appear
     in the sidebar as "New chat" forever.
     """
-    # The session's own record of which chat is open is what decides, not the
-    # conversation object: that object comes from a fetch, and a fetch that failed
-    # for any reason - a hiccup, a slow backend - would look exactly like "no chat
-    # yet" and silently start another one. That is how a sidebar fills with chats
-    # nobody asked for.
+    # The session's own record decides, not the fetched conversation: a fetch that
+    # failed looks exactly like "no chat yet", and acting on that starts a second
+    # chat holding one turn.
     conv_id = (conversation or {}).get("conv_id") or st.session_state.get(state.CURRENT_CONV)
 
     if conv_id is None:
@@ -114,11 +111,9 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
 
     with st.chat_message("assistant"):
         finished: dict = {}
-        # Streamlit serves a session on one thread, so the page is frozen from
-        # here until the answer arrives. Several seconds of a page that looks
-        # stuck reads as a broken app, so what is happening is said out loud.
-        # The stages are real, not decorative: the label changes when the first
-        # token actually arrives, which is the moment searching ended.
+        # Streamlit serves a session on one thread, so the page is frozen until the
+        # answer arrives and a stuck-looking page reads as a broken app. The stages
+        # are real: the label changes when the first token arrives.
         progress = st.status(SEARCHING_TEXT, expanded=False)
 
         def stream():
@@ -136,9 +131,7 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
         try:
             st.write_stream(stream)
         except api_client.LensApiError as error:
-            # An error is not an abstention. Saying "not in your documents" when
-            # the truth is that a call failed would be the one lie this system
-            # exists to avoid.
+            # An error is not an abstention.
             progress.update(label=FAILED_TEXT, state="error")
             st.error(f"{error.message}")
             return
@@ -165,13 +158,11 @@ def ask(conversation: dict | None, documents: list[dict], question: str) -> None
 def scroll_to_latest() -> None:
     """Put the newest turn in view inside the thread frame.
 
-    The frame does not follow its own content: freshly drawn, it shows the oldest
-    turn, and the answer just asked for sits below the fold. Streamlit has no
-    setting for this, so the last message is scrolled into view directly. The frame
-    is what scrolls, not the window, which is the whole point of the frame.
+    Freshly drawn, the frame shows its oldest turn and the answer just asked for sits
+    below the fold. Streamlit has no setting for this, so the last message is scrolled
+    into view directly - the frame scrolls, not the window.
 
-    Wrapped in a check for the element because a first run has no messages yet, and
-    one pixel tall because that is the smallest height allowed - zero is rejected.
+    One pixel tall because zero is rejected.
     """
     # `st.iframe` rather than `components.html`, which is deprecated past its
     # removal date. The markup is fixed and written here, never built from anything

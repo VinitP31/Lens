@@ -1,11 +1,10 @@
 """The sidebar: a new chat, the chats you have had, and removing one.
 
-Documents are deliberately elsewhere - a drawer that opens on demand - so the
-sidebar stays one list rather than two competing for a narrow column.
+Documents live in a drawer instead, so the sidebar stays one list rather than two
+competing for a narrow column.
 
-Deleting asks once. The rows are narrow and sit beside the row that opens a chat, so
-a stray click is likely and the loss is permanent. One click arms it, a second
-carries it out, clicking anything else puts it back.
+Deleting asks once: the rows are narrow, a stray click is likely, and the loss is
+permanent. One click arms it, a second carries it out.
 """
 
 import streamlit as st
@@ -28,9 +27,8 @@ def render() -> None:
         st.markdown("### Lens")
 
         if st.button("New chat", width="stretch"):
-            # No conversation is created here. An empty chat with no messages is
-            # a row nobody asked for; it is created when the first question is
-            # actually asked.
+            # No conversation is created here: an empty chat is a row nobody asked
+            # for. It is created when the first question is asked.
             state.open_chat(None)
             st.session_state[ARMED] = None
             st.rerun()
@@ -57,9 +55,8 @@ def render() -> None:
                 continue
 
             label = chat.get("title") or "New chat"
-            # Short enough to stay on one line in the sidebar. At 34 characters
-            # every title wrapped onto two, which made a list of five chats look
-            # like a wall and pushed the rest of the sidebar off the screen.
+            # Short enough for one line. At 34 characters every title wrapped onto
+            # two, and five chats read as a wall.
             if len(label) > LABEL_MAX_CHARS:
                 label = label[: LABEL_MAX_CHARS - 1].rstrip() + "…"
 
@@ -114,9 +111,8 @@ def _render_confirm(chat: dict) -> None:
 
 def _open(conv_id: str) -> None:
     state.open_chat(conv_id)
-    # Opening a chat cancels a pending delete on another one: the user has moved
-    # on, and leaving it armed means a later stray click deletes something they
-    # are no longer looking at.
+    # Opening a chat cancels a pending delete on another: left armed, a later stray
+    # click deletes something the user is no longer looking at.
     st.session_state[ARMED] = None
 
 
