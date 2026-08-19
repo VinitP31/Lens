@@ -91,7 +91,7 @@ same time. Stop the backend before running the evaluation.
 ## Checks
 
 ```bash
-python scripts/check.py            # lint, format, 528 tests. About 3 minutes
+python scripts/check.py            # lint, format, 530 tests. About 3 minutes
 python scripts/check.py --corpus   # also re-audits the six sample PDFs. Add a couple more
 ```
 
@@ -183,10 +183,11 @@ Lens/
 ├── frontend/               Streamlit: the screen
 │   └── README.md
 ├── config/settings.py      Every tunable value. No literals elsewhere
+├── .streamlit/config.toml  Streamlit's upload limit, kept equal to the backend's
 ├── docs/LENS.md            The specification
 ├── samples/                Six real PDFs, plus two stress files never indexed
-├── evaluation/             The two question sets and the measurement script
-├── tests/                  528 tests, no network
+├── evaluation/             The three question sets and the measurement script
+├── tests/                  530 tests, no network
 ├── scripts/                Profiler, checks, reset, stress-PDF generator
 └── data/                   Runtime state. Created on first start, not committed
 ```

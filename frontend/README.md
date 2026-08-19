@@ -109,7 +109,7 @@ frontend/
     ├── context_indicator.py What this chat searches, and changing it
     ├── documents_drawer.py  Document list, upload, delete
     ├── upload.py            Sending a file and watching it index
-    ├── citations.py         The source list and the page dialog
+    ├── citations.py         The source list, and the cited page shown beside the answer
     └── empty_state.py       First run, and the backend-is-down screen
 ```
 

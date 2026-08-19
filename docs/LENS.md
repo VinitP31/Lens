@@ -1054,6 +1054,10 @@ Lens/
 ├── .gitignore                     .env, .venv, data/
 ├── requirements.txt
 ├── pytest.ini
+├── pyproject.toml                 Ruff configuration
+│
+├── .streamlit/
+│   └── config.toml                Streamlit's own upload limit, kept equal to MAX_FILE_MB
 │
 ├── config/
 │   └── settings.py                Every tunable value. No literals anywhere else
@@ -1145,8 +1149,10 @@ Lens/
 │   └── make_stress_pdfs.py        Rebuild the two stress PDFs
 │
 └── data/                          Runtime state, not committed
-    ├── uploads/
-    ├── vectors/
+    ├── uploads/                   Original PDFs, under their content hash
+    ├── vectors/                   The Milvus Lite file
+    ├── profiles/                  profile_pdf.py output
+    ├── traces/                    Per-query and per-document JSONL
     └── lens.db
 ```
 
@@ -1171,7 +1177,8 @@ Everything below lives in `settings.py`.
 | Setting | Value | Why |
 |---|---|---|
 | `MAX_PAGES` | 50 | Keeps worst-case extraction to a few minutes |
-| `MAX_FILE_BYTES` | 25 MB | Bounds memory and upload time |
+| `MAX_FILE_MB` | 25 | One number for the size check, the wording on screen, and the limit Streamlit prints under its uploader |
+| `MAX_FILE_BYTES` | Derived from `MAX_FILE_MB` | Bounds memory and upload time |
 | `MIN_CHARS_PER_PAGE` | 150 | Below this after OCR, the PDF is unreadable |
 | `OCR_TRIGGER_CHARS_PER_PAGE` | 150 | Averaged over the document, never per page |
 | `OCR_ENGINE` | `rapidocr` | Cross-platform, no system package to install first |

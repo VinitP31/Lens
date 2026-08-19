@@ -265,7 +265,7 @@ document cannot break an answer given last week.
 python -m pytest tests/ -q
 ```
 
-528 tests, and no network at all: the embedding function is injected, so the suite
+530 tests, and no network at all: the embedding function is injected, so the suite
 costs nothing to run and works with no key set.
 
 It takes about three minutes on this machine, and almost all of that is two things
