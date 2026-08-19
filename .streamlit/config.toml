@@ -1,0 +1,6 @@
+# Streamlit reads this at startup. The uploader prints its own size limit under the
+# drop zone, and its default is 200 MB — eight times what the backend accepts, so a
+# large file uploaded fully before being refused. Kept equal to
+# settings.MAX_FILE_MB by a test, since this file cannot import Python.
+[server]
+maxUploadSize = 25

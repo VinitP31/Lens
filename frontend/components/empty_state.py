@@ -7,6 +7,7 @@ thing anyone learns a screen they never see again.
 
 import streamlit as st
 
+from config import settings
 from frontend import state
 from frontend.components import upload
 
@@ -24,7 +25,7 @@ def render() -> None:
         "Add your first document",
         type="pdf",
         key="first-upload",
-        help="Up to 25 MB and 50 pages.",
+        help=f"Up to {settings.MAX_FILE_MB} MB and {settings.MAX_PAGES} pages.",
     )
 
     if chosen is None:

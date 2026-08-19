@@ -8,6 +8,7 @@ Uploading from here changes the library and never the current chat's selection.
 
 import streamlit as st
 
+from config import settings
 from frontend import api_client, state
 from frontend.components import upload
 
@@ -36,7 +37,7 @@ def open_drawer(documents: list[dict]) -> None:
         "Add a document",
         type="pdf",
         key="drawer-upload",
-        help="Up to 25 MB and 50 pages.",
+        help=f"Up to {settings.MAX_FILE_MB} MB and {settings.MAX_PAGES} pages.",
     )
 
     if chosen is not None:

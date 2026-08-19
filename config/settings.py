@@ -34,7 +34,12 @@ DB_PATH = DATA_DIR / "lens.db"
 # whole file is held in memory while it is hashed.
 
 MAX_PAGES = 50
-MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MB
+MAX_FILE_MB = 25
+MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
+# Streamlit's uploader advertises its own limit under the drop zone, read from
+# .streamlit/config.toml at startup rather than from here. The two are kept equal
+# by a test: a widget offering more than the backend accepts wastes a long upload.
+
 
 # --- Extraction ----------------------------------------------------------
 

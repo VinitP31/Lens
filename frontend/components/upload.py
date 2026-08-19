@@ -29,8 +29,8 @@ STAGE_TEXT = {
 # Rejections the backend can return, in words that say what to do next.
 REJECTION_TEXT = {
     "duplicate_document": "That file is already in your library.",
-    "file_too_large": "That file is over the 25 MB limit.",
-    "too_many_pages": "That file is over the 50 page limit.",
+    "file_too_large": f"That file is over the {settings.MAX_FILE_MB} MB limit.",
+    "too_many_pages": f"That file is over the {settings.MAX_PAGES} page limit.",
     "encrypted_pdf": "That PDF is password protected, so its text can't be read.",
     "corrupt_file": "That file couldn't be opened as a PDF.",
     "empty_document": "That PDF has no readable text in it.",

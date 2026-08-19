@@ -970,3 +970,32 @@ def test_the_thread_and_the_page_share_one_height(monkeypatch):
 
     assert settings.PANEL_HEIGHT > 0
     assert not app.exception
+
+
+# --- The uploader's advertised limit -------------------------------------
+
+
+def test_streamlit_is_told_the_same_size_limit_the_backend_enforces():
+    """The uploader prints its own limit under the drop zone.
+
+    Streamlit's default is 200 MB. Left alone, the screen invites a file eight times
+    larger than the backend accepts, and the user waits for a full upload to be
+    refused. The number lives in a toml file that cannot import settings, so the two
+    are tied together here instead.
+    """
+    import re
+
+    from config import settings
+
+    config = (settings.PROJECT_ROOT / ".streamlit" / "config.toml").read_text()
+    found = re.search(r"maxUploadSize\s*=\s*(\d+)", config)
+
+    assert found, "no maxUploadSize in .streamlit/config.toml"
+    assert int(found.group(1)) == settings.MAX_FILE_MB
+
+
+def test_the_size_limit_in_bytes_matches_the_limit_in_megabytes():
+    """Both are used: bytes to check a file, megabytes to tell a person."""
+    from config import settings
+
+    assert settings.MAX_FILE_BYTES == settings.MAX_FILE_MB * 1024 * 1024
