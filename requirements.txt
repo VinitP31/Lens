@@ -12,9 +12,10 @@ pydantic-settings==2.15.0
 python-multipart
 sse-starlette==3.4.8
 
-# Orchestration
-langchain
-langchain-openai
+# Model calls. The OpenAI SDK directly, not LangChain: `langchain-openai` imports
+# torch, whose OpenMP runtime is a second copy alongside the one Milvus Lite
+# embeds, and a process holding both aborts on the first call with OMP: Error #15.
+# Measured by running it, not assumed.
 openai==3.0.0
 
 # PDF processing — versions verified working on macOS / Python 3.12
