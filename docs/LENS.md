@@ -1122,6 +1122,7 @@ Lens/
 ├── evaluation/
 │   ├── golden_set.csv             Answerable questions + expected doc and page
 │   ├── out_of_scope.csv           Questions with no answer in the corpus
+│   ├── followups.csv              Opening question + follow-up, for the rewrite
 │   └── run_eval.py                Prints the metrics table
 │
 ├── tests/
@@ -1363,11 +1364,15 @@ Without evaluation, every claim about the system is an opinion. With it, tuning 
 
 ### The question sets
 
-Two CSVs, both written **before any tuning**, so the system can't be unconsciously fitted to questions it already passes.
+Two CSVs written **before any tuning**, so the system can't be unconsciously fitted to questions it already passes, and a third added later for a case they did not cover.
 
 **`golden_set.csv`** — ~20 questions with the document and page expected to hold the answer. Write these while reading extracted text during extraction work: four questions per document, noted as you go, zero extra effort. Include 2–3 table lookups on purpose, since tables are the most likely thing to fail.
 
 **`out_of_scope.csv`** — ~8 questions that sound plausible for this corpus but have no answer in it.
+
+**`followups.csv`** — 14 pairs of an opening question and a short follow-up, added after both sets above were already passing. Run with `--followups`, which asks the opening question for real so the rewrite reads a genuine answer, then measures the second turn.
+
+This set exists because the two above are single-turn, so nothing measured the follow-up rewrite. A follow-up that reads as a whole sentence but names something only the previous turn introduced — *"and what does the covenant require?"* — was being searched as typed and refused at 0.282, for an answer plainly in the corpus. Measured on this set: 2 of 8 such follow-ups were lost before the rewrite prompt was corrected, 1 of 14 after, and that one retrieves the right page as its top hit but scores 0.449 against the 0.45 gate. Recorded in the file rather than fixed by moving a calibrated threshold on one question.
 
 ### Metrics
 
