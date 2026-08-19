@@ -1,11 +1,8 @@
 """The document registry: what is in the library, and what state it is in.
 
-SQLite, one local file, standard library only. A restart loses nothing and there
-is no server to run.
-
-This module owns the `documents` table. It answers three questions the rest of
-the system keeps asking: have we seen this file before, what is its ingestion
-state, and what should a citation call it.
+SQLite, one local file, standard library only. Owns the `documents` table, and answers
+the three questions the rest of the system keeps asking: have we seen this file
+before, what state is it in, and what should a citation call it.
 """
 
 import sqlite3
@@ -83,12 +80,9 @@ def _now() -> str:
 def connect(path: Path | str | None = None) -> sqlite3.Connection:
     """Open the registry, creating the schema if this is a first run.
 
-    `path` is injectable so tests can use a temporary file, and so nothing in
-    the suite can touch a real library.
-
-    Foreign keys are off by default in SQLite and have to be asked for per
-    connection. Left off, a message could reference a conversation that does not
-    exist and nothing would complain.
+    `path` is injectable so tests use a temporary file. Foreign keys are off by
+    default in SQLite and asked for per connection: left off, a message could
+    reference a conversation that does not exist.
     """
     target = Path(path) if path is not None else settings.DB_PATH
     if target != Path(":memory:"):
@@ -355,11 +349,9 @@ def embed_models_in_use(connection: sqlite3.Connection) -> set[str]:
 def assert_embed_model(connection: sqlite3.Connection) -> None:
     """Refuse to start if the library was built with a different embedding model.
 
-    This is the loudest failure in Lens by design. Vectors from two models
-    occupy unrelated spaces, so comparing them produces confident nonsense while
-    every component reports success - no exception, no warning, nothing in a log
-    to notice. An empty library is always fine: there is nothing to disagree
-    with yet.
+    The loudest failure in Lens by design: vectors from two models occupy unrelated
+    spaces, so comparing them produces confident nonsense while every component
+    reports success. An empty library is always fine.
     """
     in_use = embed_models_in_use(connection)
     foreign = in_use - {settings.EMBEDDING_MODEL}
@@ -385,9 +377,9 @@ def unfinished(connection: sqlite3.Connection) -> list[Document]:
 
 
 # --- Ingestion jobs ------------------------------------------------------
-# A job is what the UI polls while a document is being indexed. The document row
-# already holds the stage; the job adds a fraction and a human sentence, so an
-# upload that sits on one stage for a minute still shows something honest.
+# What the UI polls while a document indexes. The document row holds the stage; the
+# job adds a fraction and a sentence, so a stage that takes a minute still shows
+# something honest.
 
 
 @dataclass(frozen=True)

@@ -1,13 +1,11 @@
 """The application: startup checks, shared connections, and error translation.
 
-Startup fails rather than degrades. An unreachable store, a missing key, or an
-embedding model that does not match the index all stop the app from starting. The
-mismatch is the worst of the three: vectors from two models occupy different
-spaces, so retrieval rots while everything reports success.
+Startup fails rather than degrades. The worst of the three checks is the embedding
+model: vectors from two models occupy different spaces, so retrieval rots while
+everything reports success.
 
 A document left part-written by a killed process is discarded before the first
-request. And every typed error becomes one response shape, mapping `code` to an
-HTTP status in one place - a code is stable, a message is not.
+request, and every typed error becomes one response shape.
 """
 
 import logging
@@ -60,11 +58,8 @@ STATUS_BY_CODE = {
 def check_stores_agree(db, store) -> None:
     """Refuse to start if the registry lists documents whose chunks are missing.
 
-    Nothing keeps the two files in step, and a library whose text is gone answers
-    "not found in your documents" with nothing anywhere to say why.
-
-    Only the empty-store case, not the exact count: chunk totals drift legitimately,
-    since a soft-deleted document keeps its chunks and a reingest upserts.
+    Only the empty-store case: chunk totals drift legitimately, since a soft-deleted
+    document keeps its chunks and a reingest upserts.
     """
     expected = sum(
         document.chunk_count for document in registry.list_documents(db, ready_only=True)

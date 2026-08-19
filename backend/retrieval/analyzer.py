@@ -130,11 +130,9 @@ def openai_analyzer() -> ChatFunction:
 def _history(turns: Sequence[Message]) -> str:
     """The conversation so far, as plain text for the prompt.
 
-    A turn that was searched against a different set of documents is marked.
-    Without the marker, a chat that discussed one document, switched to another,
-    and then got a bare follow-up would have that follow-up rewritten into a
-    question about the old subject and searched in the new documents - a wrong
-    answer built out of two correct halves.
+    A turn searched against a different set of documents is marked. Without that, a
+    follow-up after a scope change is rewritten about the old subject and searched in
+    the new documents - a wrong answer built out of two correct halves.
     """
     lines: list[str] = []
     previous_scope: list[str] | None | object = _UNSET
@@ -176,13 +174,9 @@ def analyze(
 ) -> Analysis:
     """Classify a message and rewrite it to stand on its own.
 
-    Never raises. Anything that goes wrong - an unreachable provider, an
-    unparseable reply, an intent that is not one of the three - degrades to
-    treating the message as a real question, searched exactly as typed.
-
-    That direction is deliberate. Searching something that did not need searching
-    costs one wasted lookup and an honest refusal. Not searching something that
-    did would silently swallow a real question.
+    Never raises: anything that goes wrong degrades to treating the message as a real
+    question, searched as typed. Searching something that did not need it costs one
+    lookup; not searching something that did swallows a real question.
     """
     chat = chat or openai_analyzer()
 
@@ -221,15 +215,9 @@ def analyze(
 
     intent, standalone = parsed
 
-    # Two ways a rewrite is thrown away, both ending with the message searched
-    # exactly as typed.
-    #
-    # A greeting or a question about the app has nothing to search, so a rewrite
-    # could only mislead the user about what was done with their words.
-    #
-    # A rewrite of a real question that dropped a number is searching for the
-    # topic rather than the fact. Filling in what a message leaves out is the
-    # whole job; removing what it says is not.
+    # Two ways a rewrite is thrown away, both leaving the message searched as typed:
+    # a greeting has nothing to search, and a rewrite that dropped a number is
+    # searching for the topic rather than the fact.
     if intent != INTENT_QUESTION or not keeps_specifics(message, standalone):
         standalone = message
 

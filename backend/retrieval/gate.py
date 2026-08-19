@@ -50,10 +50,9 @@ def evaluate(retrieved: Retrieved, threshold: float | None = None) -> Decision:
     """
     limit = settings.GATE_THRESHOLD if threshold is None else threshold
 
-    # Nothing searchable at all: an empty library, or a scope that resolved to
-    # nothing. Distinguished from a poor match because the honest message is
-    # different - one asks the user to upload or widen, the other says the
-    # documents do not cover it.
+    # Nothing searchable at all - an empty library, or a scope resolving to nothing.
+    # Kept apart from a poor match because the honest message differs: upload or
+    # widen, against the documents not covering it.
     if retrieved.scope is not None and not retrieved.scope:
         return Decision(
             passed=False,

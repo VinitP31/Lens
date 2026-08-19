@@ -1,11 +1,11 @@
-"""One line of JSON per query, and one per indexed document.
+"""The trace log: what happened on each question, and on each indexed document.
 
-Both the similarity and the raw Milvus distance are logged side by side, because
-confusing the two is the most expensive mistake available here and it looks exactly
-like a prompt bug.
+Written once, as one line of JSON, so "why did it say that?" can be answered later
+without asking the question again.
 
-JSONL rather than a table: it appends without locking. Nothing here may raise - a
-diagnostic that breaks the answer it describes is worse than none.
+Both the similarity and the raw Milvus distance are recorded, because confusing the two
+looks exactly like a prompt bug. Nothing here may raise: a diagnostic must not be able
+to break the answer it describes.
 """
 
 import json

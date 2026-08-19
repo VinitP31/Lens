@@ -1,11 +1,10 @@
 """Keeping the original PDF on disk.
 
-Citations render the source page as an image, so the file is the evidence the
-product rests on. If it is gone, every past citation stops being checkable.
+Citations render the page as an image, so the file is the evidence the product rests
+on: gone, and every past citation stops being checkable.
 
-Files are named by content hash, never by the uploaded name: an uploaded name can
-collide, hold a path separator, or be a traversal attempt. The display name lives
-in the registry.
+Named by content hash, never by the uploaded name, which can collide or hold a path
+separator. The display name lives in the registry.
 """
 
 from pathlib import Path

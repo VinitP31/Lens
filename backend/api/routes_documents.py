@@ -1,13 +1,11 @@
 """Library endpoints: upload, list, status, delete.
 
-The split that matters is in upload. Validation runs before the response is sent,
-so a file that is too big, password protected, corrupt or already present is
-rejected while the user is still looking at the dialog. Indexing is slow, so it
-runs afterwards in the background and the caller polls.
+The split that matters is in upload: validation runs before the response, so a file
+that is too big, encrypted, corrupt or already present is rejected while the user is
+still looking at the dialog. Indexing is slow and runs in the background.
 
-Getting that the other way round - accepting everything and reporting failures
-through the job - would make every rejection arrive minutes late, for a reason
-that was knowable immediately.
+Accepting everything and reporting failures through the job would make every
+rejection arrive minutes late, for a reason knowable immediately.
 """
 
 import logging
@@ -116,9 +114,8 @@ async def status(request: Request, doc_id: str) -> IngestStatus:
 async def delete(request: Request, doc_id: str) -> None:
     """Remove a document from the library.
 
-    A soft delete. The row and the file stay, because answers already given cite
-    its pages and must keep rendering. Search excludes it from the next query
-    onward.
+    A soft delete: the row and file stay so answers already given keep rendering,
+    and search excludes it from the next query onward.
     """
     registry.soft_delete(request.app.state.db, doc_id)
 

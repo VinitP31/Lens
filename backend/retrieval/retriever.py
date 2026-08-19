@@ -43,13 +43,9 @@ class Retrieved:
 def _live_scope(connection, doc_ids: list[str] | None) -> tuple[list[str] | None, bool]:
     """Turn a requested scope into one that excludes deleted documents.
 
-    Returns the scope to search and whether searching is worthwhile at all.
-
-    Whole-library is expressed as `None`, meaning no filter, which is cheaper
-    than listing every id. But a deleted document's vectors are still in the
-    collection, so whole-library has to become an explicit list of the live ones
-    as soon as anything has been deleted - otherwise a removed document goes on
-    answering questions.
+    Whole-library is `None`, meaning no filter, which is cheaper than listing every
+    id. But a deleted document's vectors are still in the collection, so once
+    anything has been deleted it must become an explicit list of the live ones.
     """
     live = [document.doc_id for document in registry.list_documents(connection, ready_only=True)]
 
@@ -76,12 +72,9 @@ def _has_deleted(connection) -> bool:
 def _longest_shared_run(first: str, second: str) -> int:
     """Length, in words, of the longest run of consecutive words both texts share.
 
-    This models what the overlap window actually does: it copies whole sentences
-    from the end of one chunk to the start of the next, so a duplicate pair
-    contains one long identical run rather than merely resembling each other.
-
-    Counting shared vocabulary instead would collapse two short chunks that use
-    the same ordinary words to state completely different facts.
+    This is what the overlap window produces: whole sentences copied from one chunk
+    into the next. Counting shared vocabulary instead would collapse two short chunks
+    that use ordinary words to state different facts.
     """
     left = first.split()
     right = second.split()
@@ -105,12 +98,9 @@ def _longest_shared_run(first: str, second: str) -> int:
 def _deduplicate(hits: list[Hit]) -> tuple[list[Hit], int]:
     """Collapse chunks that are the same passage twice, keeping the better score.
 
-    Only chunks from the same document and the same page are compared. Two
-    different documents stating the same rule are genuinely two sources and both
-    deserve to be cited; two neighbours inside one page sharing an overlap window
-    are one source counted twice.
-
-    Hits arrive best-first, so the survivor is always the higher-scoring one.
+    Same document and same page only: two documents stating the same rule are two
+    sources, while two neighbours sharing an overlap window are one counted twice.
+    Hits arrive best-first, so the survivor is the higher-scoring one.
     """
     kept: list[Hit] = []
     removed = 0
@@ -141,12 +131,10 @@ def retrieve(
 ) -> Retrieved:
     """The chunks most likely to answer `question`.
 
-    `doc_ids` of None means the whole library. An empty list means the caller
-    selected nothing, which returns nothing rather than quietly searching
-    everything.
+    `doc_ids` of None means the whole library; an empty list means the caller selected
+    nothing, and returns nothing rather than searching everything.
 
-    `embed` is injectable so the evaluation script and the tests can supply their
-    own, and so a query is never embedded by a different model than the documents.
+    `embed` is injectable, so tests and the evaluation supply their own.
     """
     if doc_ids is not None and not doc_ids:
         return Retrieved(hits=[], candidates_fetched=0, duplicates_removed=0, scope=[])

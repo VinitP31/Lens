@@ -34,10 +34,10 @@ NO_DOCUMENTS_REPLY = (
 
 
 def _citation_dicts(citations) -> list[dict]:
-    """Citations as they are stored on the message and returned to the UI.
+    """Citations as stored on the message and returned to the UI.
 
-    Plain dictionaries, because this is what goes into the message row as JSON
-    and is read back verbatim years later without being resolved again.
+    Plain dictionaries: this is what the message row holds as JSON, read back
+    verbatim rather than resolved again.
     """
     return [
         {
@@ -71,11 +71,9 @@ def _meta_reply(db) -> str:
 def _scope_for(conversation, db) -> list[str] | None:
     """Which documents this chat searches, as ids, or None for the whole library.
 
-    A subset is filtered against what is still present, because a document
-    selected last week may have been deleted since. A subset that empties out
-    entirely stays empty rather than silently widening to the whole library -
-    the user chose those documents, and answering from others would be answering
-    a different question.
+    A subset is filtered against what is still present. One that empties out stays
+    empty rather than widening to the whole library: answering from documents the
+    user did not choose would be answering a different question.
     """
     if conversation.is_library_wide:
         return None
@@ -187,10 +185,9 @@ async def send(request: Request, conv_id: str, body: SendMessage):
 
         # 4. Search, then decide whether there is enough to answer from at all.
         #
-        # Wrapped, because searching embeds the question and that is a network
-        # call. Once the stream has opened there is no status code left to send,
-        # so a failure here has to arrive as an error event rather than as a
-        # half-written response - and it must never be stored as an answer.
+        # Wrapped because embedding the question is a network call, and the stream
+        # is already open: a failure has to arrive as an error event, never stored
+        # as an answer.
         try:
             found = retriever.retrieve(db, store, analysis.standalone, doc_ids=scope)
         except Exception as error:  # noqa: BLE001 - reported, never stored
@@ -213,7 +210,7 @@ async def send(request: Request, conv_id: str, body: SendMessage):
         diagnostics.used = len(found.hits)
 
         if not decision.passed:
-            # No model call. This is the whole point of the gate sitting here.
+            # No model call: this is why the gate sits ahead of generation.
             yield finish("", abstained=True, reason=decision.reason)
             return
 

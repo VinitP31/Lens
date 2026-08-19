@@ -16,10 +16,8 @@ from dataclasses import dataclass
 from backend.errors import MissingApiKeyError
 from config import settings
 
-# Anything containing a digit: "100", "12", "FR-01", "31-13-9", "4.2". These are
-# what find a specific passage rather than the general topic, so a shortened or
-# rewritten question that has lost one is searching for something weaker than
-# what was asked.
+# Anything containing a digit: "100", "FR-01", "4.2". These find a specific passage
+# rather than the general topic, so a rewrite that lost one asks something weaker.
 SPECIFIC = re.compile(r"[\w./-]*\d[\w./-]*")
 
 # Takes the messages, returns the reply as one string. Injected so the suite runs
@@ -57,13 +55,9 @@ class Condensed:
 def keeps_specifics(original: str, rewritten: str) -> bool:
     """Whether a rewrite kept every number and code the original had.
 
-    Shared with the analyzer, since both restate a question and both fail the same
-    way. Measured: a message mentioning a total of 100 points was rewritten without
-    the number, and the passage holding the figures dropped out of the results
-    entirely. Instructions alone did not fix it reliably, so the decision is made
-    here - a rewrite that lost a specific is discarded.
-
-    Only losses matter; a rewrite that adds a number is the prompt's problem.
+    Measured: a message mentioning "100 points" was rewritten without the number, and
+    the passage holding the figures fell out of the results. Instructions alone did
+    not fix it, so a rewrite that lost a specific is discarded here.
     """
     lost = set(SPECIFIC.findall(original)) - set(SPECIFIC.findall(rewritten))
     return not lost
@@ -99,12 +93,8 @@ def openai_condenser() -> ChatFunction:
 def condense(message: str, chat: ChatFunction | None = None) -> Condensed:
     """Reduce a long message to the question inside it.
 
-    A short message is returned untouched without any call being made.
-
-    A failure here is not fatal. If the model is unreachable or returns nothing
-    usable, the original message is searched with instead: a slightly weaker
-    search is a far better outcome than refusing to answer at all, and the user
-    still gets the same answer path.
+    A short message is returned untouched, with no call made. A failure is not fatal:
+    the original is searched with instead, which is weaker but still an answer.
     """
     if not needed(message):
         return Condensed(text=message, original=message, was_condensed=False)

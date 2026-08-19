@@ -1,11 +1,10 @@
 """Turn chunks into vectors.
 
-The only part of ingestion that leaves the machine, so it batches, retries
-transient failures, and takes the embedding function as an argument.
+The only part of ingestion that leaves the machine, so it batches, retries transient
+failures, and takes the embedding function as an argument.
 
-What gets embedded is `chunk.embed_text` - the context header and the body - and
-order is restored from the index the provider returns, never from arrival order:
-getting that wrong attaches each chunk's text to another chunk's meaning with no
+Order is restored from the index the provider returns, never from arrival order:
+getting that wrong attaches each chunk's text to another chunk's meaning, with no
 error anywhere. The query side must embed through this same module.
 """
 

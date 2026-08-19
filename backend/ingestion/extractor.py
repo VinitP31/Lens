@@ -1,12 +1,10 @@
-"""Docling extraction with page and coordinate provenance.
+"""Read a PDF into an ordered list of text pieces, each knowing where it came from.
 
-Turns a PDF into a flat, ordered list of elements. Every element knows its text,
-its page, where it sits on that page, what kind of thing it is, and which section
-it came from. That provenance is what makes citations clickable, so it is
-captured here or not at all.
+Every piece carries its text, its page, where it sits on that page, what kind of thing
+it is, and which section it belongs to. Those four facts are what make a citation
+clickable, and this is the only place they can be captured.
 
-Nothing in this module knows anything about a specific document. Structure is
-read from Docling's own labels, never from filenames, titles or page offsets.
+Structure is read from Docling's own labels, never from filenames or page offsets.
 """
 
 import re
@@ -50,17 +48,13 @@ from config import settings
 
 # Labels dropped before anything downstream sees them.
 #
-# PAGE_HEADER / PAGE_FOOTER: "Confidential - Page 12 of 84" on every page would
-# be embedded into every chunk, making all chunks slightly more alike, which
-# compresses the range of similarity scores and corrupts the confidence gate.
+# A header on every page - "Confidential - Page 12 of 84" - would be embedded into
+# every chunk, making them all slightly more alike, which compresses similarity
+# scores and corrupts the gate. A contents page holds the vocabulary of every topic
+# and the answer to none, so it scores well and occupies an evidence slot.
 #
-# DOCUMENT_INDEX: a contents page holds the vocabulary of every topic and the
-# answer to none. It scores well against many questions, occupies an evidence
-# slot, and can pass the gate while carrying no usable text.
-#
-# Captions are NOT dropped here. They usually arrive through their parent figure
-# or table, but not always, and a caption that did not is the only record of that
-# figure in the text. They are kept and de-duplicated afterwards instead.
+# Captions are NOT dropped here: one that did not arrive through its figure is the
+# only record of that figure. They are de-duplicated afterwards instead.
 DROPPED_LABELS = frozenset(
     {
         DocItemLabel.PAGE_HEADER,
@@ -71,14 +65,10 @@ DROPPED_LABELS = frozenset(
 
 SECTION_SEPARATOR = " > "
 
-# A contents entry looks like "Attendance Policy ......... 18". Docling labels
-# most of them DOCUMENT_INDEX, but not always every fragment, so leaders left
-# behind on a page already identified as contents are dropped too.
-#
-# This pattern is deliberately only applied to pages Docling has already flagged.
-# A requirements list such as "FR-01 ....... 12" is typographically identical to
-# a contents entry, and deleting real content is far worse than keeping a
-# contents page, so the pattern is never allowed to decide on its own.
+# A contents entry looks like "Attendance Policy ......... 18". Applied only to
+# pages Docling already flagged as contents: a requirements list such as
+# "FR-01 ....... 12" is typographically identical, and deleting real content is far
+# worse than keeping a contents page.
 DOTTED_LEADER = re.compile(r"\.\s?\.\s?\.\s?\.")
 
 # Characters that carry no meaning in extracted text. Symbol fonts render
@@ -90,14 +80,11 @@ JUNK_CHARACTERS = re.compile("[\ue000-\uf8ff\ufffc\ufffd\x00-\x08\x0b\x0c\x0e-\x
 # True when the text holds at least one letter, in any alphabet.
 HAS_LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
 
-# A paragraph that opens with its own section title: capitals, at least two
-# words, an optional aside in brackets, a separator, then prose. Anything from
-# "BEFORE DAY ONE - Ensure..." to "THE FIRST SIX MONTHS (180-day check in).
-# Continue..." reads the same way to a person.
+# A paragraph opening with its own section title: capitals, two or more words, an
+# optional bracketed aside, a separator, then prose - "BEFORE DAY ONE - Ensure...".
 #
-# Deliberately strict about the capitals, because inventing a heading is worse
-# than missing one. Across the sample corpus this matched six titles and nothing
-# else in 178 pages.
+# Strict about the capitals, because inventing a heading is worse than missing one.
+# Measured: six titles and nothing else across 178 pages of the sample corpus.
 RUN_IN_HEADING = re.compile(
     r"^([A-Z][A-Z0-9'&/\-\. ]{4,58}?)"  # the title itself, set in capitals
     r"(?:\s*\([^)]{0,40}\))?"  # an optional aside, any case
@@ -133,7 +120,7 @@ class Element:
     page: int
     element_type: str
     section_path: str
-    # One box per provenance region, as (left, top, right, bottom) in PDF points
+    # One box per region the text occupies, as (left, top, right, bottom) in points
     # with a TOP-LEFT origin, matching how PyMuPDF later draws the highlight.
     bboxes: list[tuple[float, float, float, float]] = field(default_factory=list)
 
@@ -175,14 +162,9 @@ class ExtractedDocument:
 def _converter(with_ocr: bool = False) -> DocumentConverter:
     """Build a Docling converter once per mode.
 
-    Construction loads layout and table models, which costs seconds and a few
-    hundred megabytes, so each is shared across documents for the process
-    lifetime. Two are cached rather than one: a document that needs OCR is read
-    twice, once each way, and rebuilding the models for the second pass would
-    double an already slow path.
-
-    OCR is off in the ordinary converter. Running it on a PDF that already has a
-    text layer roughly triples the time and replaces exact text with a guess.
+    Construction loads layout and table models - seconds and a few hundred megabytes
+    - so each is shared for the process lifetime. Two are cached because a document
+    needing OCR is read twice, once each way.
     """
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = with_ocr
@@ -208,13 +190,11 @@ def _bboxes_top_left(
 ) -> list[tuple[float, float, float, float]]:
     """Return the item's boxes converted to a top-left origin.
 
-    Docling reports coordinates from the bottom-left, the PDF convention.
-    PyMuPDF draws from the top-left, the screen convention. Converting once
-    here means no renderer downstream has to remember which way up it is.
+    Docling reports from the bottom-left, PyMuPDF draws from the top-left, so the
+    conversion happens once here rather than in every renderer.
 
-    A paragraph that runs across a page break has a box on each page. Passing
-    `only_page` keeps just that page's boxes, because a highlight drawn from
-    another page's coordinates would land on the wrong part of the wrong page.
+    `only_page` keeps one page's boxes: a paragraph crossing a page break has a box
+    on each, and the wrong one lands the highlight on the wrong page.
     """
     boxes: list[tuple[float, float, float, float]] = []
     for prov in item.prov or []:
@@ -276,14 +256,10 @@ def _run_in_heading(text: str) -> tuple[str, int] | None:
 def _is_really_a_heading(text: str) -> bool:
     """Whether text classified as a heading actually reads like one.
 
-    Layout models label a lead-in sentence such as "The vendor must clearly
-    identify all third-party components and describe:" as a heading. Accepting
-    that has two costs: the sentence stops being indexed as content, because
-    headings live in the section path rather than in the text, and every list
-    item beneath it is filed under a section that does not exist.
-
-    Short labels ending in a colon, such as "PERFORMANCE BONDS:", are genuine
-    headings and stay.
+    Layout models call a lead-in sentence - "The vendor must clearly identify all
+    third-party components and describe:" - a heading. Accepting it loses the
+    sentence as content and files every item beneath under a section that does not
+    exist. Short labels ending in a colon are genuine headings and stay.
     """
     if len(text) > settings.HEADING_MAX_CHARS:
         return False
@@ -366,14 +342,12 @@ def _page_texts(pdf_path: Path) -> dict[int, str]:
 def _repair_glyphs(text: str, page_text: str) -> str:
     """Restore a character that was mis-decoded, using a second reader.
 
-    A threshold written "≥ 4 hours before arrival" can arrive as "‡ 4 hours
-    before arrival", which changes a requirement rather than merely looking odd.
+    "≥ 4 hours before arrival" can arrive as "‡ 4 hours before arrival", which
+    changes a requirement rather than merely looking odd.
 
-    Nothing is assumed about what the character ought to be. The passage is
-    located in the page text as PyMuPDF read it, and whatever character sits
-    there is used. If both readers agree, or the passage cannot be located
-    exactly once, the text is left as it is - a document that really does use a
-    dagger keeps it.
+    Nothing is assumed about the right character: whatever PyMuPDF read at that spot
+    is used, and if the readers agree or the passage cannot be located exactly once,
+    the text stands - a document that really uses a dagger keeps it.
     """
     if not page_text or not GLYPH_SUSPECTS.search(text):
         return text
@@ -418,13 +392,11 @@ def _repair_glyphs(text: str, page_text: str) -> str:
 def _repair_spacing(text: str, page_text: str) -> str:
     """Restore spacing inside a word, using the second reader.
 
-    Layout analysis sometimes breaks a word: "Checklist" arrives as "Checklis t",
-    which no longer matches a search for the word it is. It can also close a gap
-    that belonged there.
+    Layout analysis sometimes breaks a word - "Checklist" arrives as "Checklis t" -
+    which no longer matches a search for it.
 
-    The two readers must agree on every character for a repair to happen - only
-    the spaces may differ. That makes the change safe: nothing is added, removed
-    or guessed, and the passage is rewritten only when it is the same passage.
+    The readers must agree on every character; only the spaces may differ. Nothing is
+    added, removed or guessed.
     """
     if not page_text or "|" in text or len(text) < 8:
         return text
@@ -550,7 +522,7 @@ def _is_indexable(text: str, page: int, contents_pages: set[int]) -> bool:
 
 
 def _page_of(item) -> int | None:
-    """The page an item sits on, or None when it has no provenance."""
+    """The page an item sits on, or None when Docling recorded no position for it."""
     if not item.prov:
         return None
     return item.prov[0].page_no
@@ -580,14 +552,12 @@ def _heading_stacks(
 ) -> tuple[list[tuple[int, float]], list[dict[int, str]], list[tuple]]:
     """Build the heading stack as it stands at each heading, in visual order.
 
-    Section paths are resolved by position rather than by the order Docling
-    emitted things, because Docling sometimes emits a page's main heading after
-    the paragraphs beneath it. Walking in emission order would then hand those
-    paragraphs the previous page's heading, which is worse than no heading at
-    all: a citation would name a section the text does not belong to.
+    By position, not emission order: Docling sometimes emits a page's main heading
+    after the paragraphs beneath it, and walking in emission order would file those
+    paragraphs under the previous page's heading.
 
-    Only the label is decided here. Element order is left exactly as Docling
-    produced it, so a mistake in this function can never scramble reading order.
+    Only the label is decided here - element order is left as Docling produced it, so
+    a mistake here cannot scramble reading order.
     """
     headings: list[tuple[tuple[int, float], int, str, list]] = []
     for item, _level in doc.iterate_items():
@@ -716,14 +686,10 @@ def _with_orphan_headings(
 ) -> list[Element]:
     """Keep a heading that has no text beneath it, as text in its own right.
 
-    A heading normally survives inside the section path of the text below it.
-    When two headings follow one another with nothing in between - a title above
-    a subtitle, a label above an address - the first has no text to attach to and
-    would disappear from the document altogether.
-
-    That is real content loss: on one sample it removed the document's own
-    reference number, "Request for Proposal #26-004", which is exactly the kind
-    of thing somebody would search for.
+    A heading normally survives in the section path of the text below it. Two
+    headings in a row leave the first with nothing to attach to, and it disappears
+    entirely - on one sample that lost "Request for Proposal #26-004", exactly the
+    kind of thing somebody searches for.
     """
     occupied = {
         (element.page, round(min(b[1] for b in element.bboxes), 1))
@@ -759,12 +725,10 @@ def _with_orphan_headings(
 def _looks_like_prose_columns(page_elements: list[Element]) -> bool:
     """Whether a page is two columns of running prose rather than a grid.
 
-    Both look like two columns of text. The difference is alignment: a grid puts
-    a label beside its value on the same line, so items pair up across the gap,
-    while two columns of an article flow independently and rarely line up.
-
-    Reading a grid row by row is correct and reading an article row by row is
-    nonsense, so this decides which pages may be re-ordered at all.
+    A grid puts a label beside its value on one line, so items pair up across the
+    gap; an article's columns flow independently. Reading a grid row by row is
+    correct and reading an article that way is nonsense, so this decides which pages
+    may be re-ordered at all.
     """
     boxes = [
         (
@@ -830,14 +794,11 @@ def _looks_like_prose_columns(page_elements: list[Element]) -> bool:
 def _in_reading_order(elements: list[Element]) -> list[Element]:
     """Put each page's elements into visual order, where that is safe to do.
 
-    Docling sometimes emits an element far from where it sits on the page, which
-    separates a date from the event beside it or moves a table away from the
-    text it belongs to. Sorting by position repairs that.
+    Docling sometimes emits an element far from where it sits, separating a date from
+    the event beside it. Sorting by position repairs that.
 
-    Pages that look like two columns of prose are left exactly as Docling
-    produced them, because reading those row by row would interleave the columns.
-    Reading order is the one thing that must never be scrambled, so where there
-    is any doubt the original order stands.
+    Pages that look like two columns of prose are left alone: reading those row by
+    row interleaves the columns, so where there is any doubt the original stands.
     """
     by_page: dict[int, list[Element]] = {}
     for element in elements:
@@ -942,7 +903,7 @@ def _with_paired_values(elements: list[Element]) -> list[Element]:
 
 
 def extract(pdf_path: Path, with_ocr: bool = False) -> ExtractedDocument:
-    """Extract one PDF into ordered elements with full provenance.
+    """Extract one PDF into ordered elements, each with its page and position.
 
     Raises:
         ExtractionFailedError: Docling could not process the file.
@@ -996,25 +957,19 @@ def extract(pdf_path: Path, with_ocr: bool = False) -> ExtractedDocument:
 
         if isinstance(item, SectionHeaderItem | TitleItem):
             # Headings are structure, not content: they label the text beneath
-            # them through the section path. A heading emitted as its own
-            # element would answer nothing while scoring well and occupying an
-            # evidence slot.
-            #
-            # Unless it is not really a heading, in which case it is a sentence
-            # that would otherwise be lost entirely.
+            # them through the section path, and one emitted as its own element
+            # would answer nothing while occupying an evidence slot. Unless it is
+            # not really a heading, in which case it is a sentence.
             text = _clean(item.text)
             if not text or _is_really_a_heading(text):
                 continue
             element_type = TYPE_TEXT
         elif label is DocItemLabel.CAPTION:
-            # Captions normally arrive through their figure or table. One that
-            # did not is the only record of that figure, so it is kept rather
-            # than dropped; duplicates are removed afterwards.
-            #
-            # It is only labelled a figure caption when the page actually holds a
-            # picture. Layout models also label a note heading as a caption, and
-            # calling that a figure would tell the user to look at an image that
-            # is not there.
+            # A caption that did not arrive through its figure is the only record
+            # of it, so it is kept and de-duplicated later. Labelled a figure
+            # caption only when the page holds a picture: layout models also call a
+            # note heading a caption, and that would send the user to a missing
+            # image.
             text = _clean(item.text)
             element_type = TYPE_FIGURE_CAPTION if page in picture_pages else TYPE_TEXT
         elif isinstance(item, TableItem):

@@ -41,10 +41,9 @@ class CorruptFileError(LensError):
 
 
 class EncryptedPDFError(LensError):
-    """The PDF is password protected, so its text cannot be read.
+    """Password protected, so its text cannot be read.
 
-    Separate from a corrupt file. The user can do something about this one - the
-    two must not share a message.
+    Separate from a corrupt file: the user can fix this one.
     """
 
     code = "encrypted_pdf"
@@ -66,10 +65,9 @@ class TooManyPagesError(LensError):
 
 
 class EmbeddingFailedError(LensError):
-    """The embedding provider could not be reached, or returned something unusable.
+    """The embedding provider failed, after retries.
 
-    Raised only after retries are exhausted, or immediately for a failure that
-    retrying cannot fix, such as a missing or rejected key.
+    Raised immediately for a failure retrying cannot fix, such as a rejected key.
     """
 
     code = "embedding_failed"
@@ -78,9 +76,8 @@ class EmbeddingFailedError(LensError):
 class MissingApiKeyError(LensError):
     """No API key in the environment.
 
-    Its own error because it is the one failure a user can fix themselves, and
-    the message needs to say which variable to set rather than surfacing a
-    provider's authentication error.
+    Its own error so the message can name the variable to set, rather than surfacing
+    a provider's authentication error.
     """
 
     code = "missing_api_key"
@@ -92,8 +89,7 @@ class MissingApiKeyError(LensError):
 class DuplicateDocumentError(LensError):
     """A document with these exact bytes is already in the library.
 
-    Carries the existing document's id in `doc_id`, so the caller can point at
-    what is already there instead of reporting a bare failure.
+    Carries the existing `doc_id`, so the caller can point at what is already there.
     """
 
     code = "duplicate_document"
@@ -112,9 +108,8 @@ class DocumentNotFoundError(LensError):
 class EmbedModelMismatchError(LensError):
     """The configured embedding model is not the one the collection was built with.
 
-    Refuse to start rather than carry on. Vectors from two different models
-    occupy different spaces, so mixing them wrecks retrieval while every part of
-    the system reports success. Nothing else in Lens fails this quietly.
+    Vectors from two models occupy different spaces, so mixing them wrecks retrieval
+    while everything reports success. Nothing else in Lens fails this quietly.
     """
 
     code = "embed_model_mismatch"
@@ -129,10 +124,8 @@ class VectorStoreError(LensError):
 class GenerationFailedError(LensError):
     """The answer model could not be reached, or returned nothing usable.
 
-    Distinct from an abstention. An abstention is a correct outcome the system
-    reports calmly; this is a failure, and telling a user the documents do not
-    cover their question when the truth is that the provider was down would be a
-    lie in the one place this system exists not to tell one.
+    Never reported as an abstention: saying the documents do not cover a question
+    when the provider was down would be a lie.
     """
 
     code = "generation_failed"
@@ -147,9 +140,8 @@ class ConversationNotFoundError(LensError):
 class EmptyScopeError(LensError):
     """A chat was given no documents to search.
 
-    Refused rather than stored. Every question against an empty scope would be
-    refused for having nothing to search, and the user would read that as the app
-    being broken rather than as the setting they chose.
+    Refused rather than stored: every question would then be refused, and the user
+    would read that as the app being broken rather than as their own setting.
     """
 
     code = "empty_scope"
@@ -158,10 +150,8 @@ class EmptyScopeError(LensError):
 class StoreMismatchError(LensError):
     """The document registry and the vector store disagree about what exists.
 
-    Nothing forces two separate files to stay in step, so the registry can list
-    documents whose chunks are gone. Every question then returns "not found in your
-    documents" for a library that visibly contains documents, which is why this is
-    refused at startup rather than answered.
+    The registry can list documents whose chunks are gone, and every question then
+    returns "not found in your documents" for a library that visibly contains them.
     """
 
     code = "store_mismatch"
@@ -176,9 +166,8 @@ class PageNotFoundError(LensError):
 class RenderFailedError(LensError):
     """The page could not be turned into an image.
 
-    Distinct from a missing page. The original file is gone or unreadable, which
-    means a citation into it can no longer be checked - worth saying plainly
-    rather than showing a blank frame.
+    Distinct from a missing page: the file itself is gone or unreadable, so a
+    citation into it can no longer be checked.
     """
 
     code = "render_failed"
@@ -187,9 +176,8 @@ class RenderFailedError(LensError):
 class UnreadableDocumentError(LensError):
     """The PDF has pages but no readable text, even after OCR.
 
-    Rejected rather than indexed. A document that produced almost nothing would
-    sit in the library answering nothing, and a user would have no way to tell
-    that from the system simply not finding their answer.
+    Rejected rather than indexed: it would sit in the library answering nothing,
+    which a user cannot tell from the system simply not finding an answer.
     """
 
     code = "unreadable_document"

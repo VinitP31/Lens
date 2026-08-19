@@ -229,10 +229,9 @@ def _chunk_group(group: list[Element], counter: TokenCounter) -> list[_Pending]:
                 )
             continue
 
-        # A chunk belongs to exactly one page, because a citation resolves to one
-        # page and one set of coordinates on it. Merging text from the next page
-        # into this chunk would file that text under this chunk's page number,
-        # and clicking the citation would open a page the text is not on.
+        # A chunk belongs to exactly one page: merging text from the next page
+        # would file it under this page number, and the citation would open a page
+        # the text is not on.
         if current is not None and element.page != current.page:
             close()
 
@@ -248,10 +247,8 @@ def _chunk_group(group: list[Element], counter: TokenCounter) -> list[_Pending]:
                     continue
 
             starter = [part]
-            # Overlap only within a page. Repeating the previous page's closing
-            # sentences here would put text on this chunk that is not on the page
-            # this chunk cites, and it would also make the previous chunk look
-            # like a redundant copy of this one.
+            # Overlap only within a page, for the same reason: the repeated tail
+            # must be on the page this chunk cites.
             if out and out[-1].element_type == TYPE_TEXT and out[-1].page == element.page:
                 tail = _tail(out[-1].text, counter)
                 # Only worth repeating if it does not swallow the whole budget.
@@ -308,13 +305,11 @@ def _normalised(text: str) -> str:
 def _drop_redundant(pending: list[_Pending], counter: TokenCounter) -> list[_Pending]:
     """Remove undersized chunks whose text a neighbour already carries.
 
-    A heading is emitted as its own element and is also the section path of what
-    follows, so it becomes a three-token chunk holding a title and no fact, which
-    then competes for a retrieval slot. Dropped only when its text appears in an
-    adjacent chunk, so nothing is lost from the index.
+    A heading is both its own element and the section path of what follows, so it
+    becomes a three-token chunk holding a title and no fact. Dropped only when its
+    text appears in an adjacent chunk.
 
-    Not a rule about short chunks in general: a one-paragraph subsection is real
-    content and states its own subject through its header.
+    Not a rule about short chunks in general.
     """
     keep: list[_Pending] = []
     for index, item in enumerate(pending):
@@ -338,11 +333,9 @@ def _drop_redundant(pending: list[_Pending], counter: TokenCounter) -> list[_Pen
 def _is_carried_by(text: str, other: _Pending) -> bool:
     """Whether a neighbour already holds this wording.
 
-    Containment must be strict. Two sections can legitimately hold the identical
-    short sentence - a guide repeating "Collaborate with the Onboarding
-    Coordinator" under each phase - and those are separate statements that each
-    deserve their own citation, not duplicates. Only text that a neighbour holds
-    *in addition to* its own content is genuinely repeated.
+    Containment must be strict: two sections can legitimately hold the same short
+    sentence, and those are separate statements deserving their own citations. Only
+    text a neighbour holds *in addition to* its own content is genuinely repeated.
     """
     body = _normalised(other.text)
     if text in _normalised(other.section_path):
@@ -363,11 +356,9 @@ def chunk(
     """
     counter = counter or count_tokens
 
-    # A contents page holds the vocabulary of every topic in the document and the
-    # answer to none of them, so it scores respectably against many questions and
-    # satisfies none. The extractor identifies those pages but leaves their
-    # elements in place, because whether to index them is a chunking decision,
-    # not an extraction one.
+    # A contents page holds the vocabulary of every topic and the answer to none, so
+    # it scores respectably against many questions and satisfies none. The extractor
+    # identifies those pages; whether to index them is a chunking decision.
     elements = [
         element for element in document.elements if element.page not in document.contents_pages
     ]

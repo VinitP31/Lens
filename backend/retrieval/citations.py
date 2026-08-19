@@ -15,10 +15,8 @@ from backend.ingestion.chunk import TYPE_TABLE
 from backend.storage.vector_store import Hit
 from config import settings
 
-# `[1]`, `[12]`. Only a bracketed number counts, so ordinary brackets in prose
-# are left alone and a bare "passage 2" is not treated as a citation - the
-# contract in the prompt is explicit, and guessing at near-misses would let a
-# malformed reference resolve to a real source.
+# `[1]`, `[12]`. Only a bracketed number counts: guessing at near-misses like
+# "passage 2" would let a malformed reference resolve to a real source.
 CITATION = re.compile(r"\[(\d+)\]")
 
 # The same thing with any space in front of it, for removing markers from text
@@ -30,12 +28,8 @@ SPACED_CITATION = re.compile(r"[ \t]*\[\d+\]")
 class Citation:
     """One validated citation, resolved to something a reader can open.
 
-    Everything here is looked up by code from the passage the number refers to.
-    None of it is taken from the model's reply.
-
-    Stored on the message as it is at answer time, never re-resolved when the
-    conversation is displayed again: a document soft-deleted next week must not
-    change or break an answer given today.
+    Every field is looked up by code from the passage the number refers to, never
+    taken from the model's reply, and stored as it was at answer time.
     """
 
     number: int
@@ -83,13 +77,9 @@ def parse(answer: str) -> list[int]:
 def _snippet(text: str, element_type: str = "") -> str:
     """The opening of a passage, cut at a word boundary.
 
-    Prose is collapsed onto one line, because a passage's own line breaks are an
-    artifact of the page width and reproducing them in a chat reply looks broken.
-
-    A table keeps its line breaks. Collapsing them turns rows into one run of
-    pipes and dashes that nothing can read back into a table - and a table is
-    exactly the passage a reader most wants to check, because a number belongs to
-    the row it sits in and to nothing else.
+    Prose is collapsed onto one line: its breaks come from the page width. A table
+    keeps its rows, because collapsed they become a run of pipes nothing can read
+    back, and a number belongs to the row it sits in.
     """
     if element_type == TYPE_TABLE:
         return _table_snippet(text)
@@ -171,11 +161,7 @@ def validate(answer: str, hits: Sequence[Hit], names: dict[str, str]) -> Validat
 def strip_markers(answer: str) -> str:
     """The answer without its citation markers, for a plain-text copy.
 
-    Used where the markers would be noise rather than links. The answer shown in
-    the UI keeps them, because they are what makes it checkable.
-
-    The space before a marker goes with it. Removing the marker alone leaves
-    "monthly ." wherever a sentence ended with a citation, which is every
-    sentence this system produces.
+    The space before a marker goes with it: removing the marker alone leaves
+    "monthly ." wherever a sentence ended in a citation, which is most of them.
     """
     return " ".join(SPACED_CITATION.sub("", answer).split())

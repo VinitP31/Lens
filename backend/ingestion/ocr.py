@@ -1,12 +1,11 @@
 """Reading a document, falling back to OCR only when it is needed.
 
-OCR roughly triples the time and its output is a guess where a real text layer is
-exact, so a document is read normally first and its character density decides.
-Still below the floor after OCR, the document is rejected rather than indexed:
-otherwise it sits in the library answering nothing.
+OCR triples the time and its output is a guess where a real text layer is exact, so
+a document is read normally first and its character density decides. Still below the
+floor afterwards, it is rejected rather than indexed.
 
-Density is averaged over the whole document. A report with a few full-page charts
-has near-empty pages and is not a scan.
+Density is averaged over the whole document: a report with a few full-page charts is
+not a scan.
 """
 
 import logging

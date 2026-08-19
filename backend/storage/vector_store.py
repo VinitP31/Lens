@@ -1,13 +1,11 @@
 """Chunks and their vectors, in Milvus Lite.
 
-One local file, no server. Everything about how a chunk is stored and searched
-lives here, so no caller handles a raw Milvus result.
+One local file, no server, and no caller ever handles a raw Milvus result.
 
-Two load-bearing details. The chunk id is derived, never generated -
+Two details carry weight. A chunk's id is worked out rather than generated -
 `{doc_id}:{index}` - so ingesting a document twice updates the same rows instead of
-adding a second copy of every chunk. And search returns an explicit `similarity`,
-already the right way up, because Milvus reports it in a field called `distance`
-and the gate compares against a threshold.
+storing it again. And search returns a `similarity` that is already the right way up,
+so nothing downstream has to decide whether a bigger number means closer.
 """
 
 import json
@@ -89,9 +87,8 @@ def connect(path: Path | str | None = None) -> MilvusClient:
         )
     else:
         # An existing collection comes back released, and a released collection
-        # refuses every search. A freshly created one is loaded already, so this
-        # only bites on the second run of the process - which is every real run
-        # after the first, and none of the ones a single test process sees.
+        # refuses every search. A freshly created one is already loaded, so this only
+        # bites from the second run onward - every real run, and no test run.
         client.load_collection(settings.MILVUS_COLLECTION)
     return client
 
@@ -109,13 +106,9 @@ def dimension(client: MilvusClient) -> int | None:
 def assert_usable(client: MilvusClient) -> None:
     """Refuse to continue if the collection cannot hold the configured model's vectors.
 
-    Called at startup. Width is the half of the model guard that lives here,
-    because a collection's dimension is fixed at creation and a vector of the
-    wrong width cannot be inserted at all.
-
-    The model's *name* is checked separately, against the registry, because
-    Milvus Lite does not persist a collection description and the name is
-    already recorded per document there.
+    Width is the half of the model guard that lives here, since a collection's
+    dimension is fixed at creation. The model's name is checked against the registry
+    instead, because Milvus Lite does not persist a collection description.
     """
     width = dimension(client)
     if width is not None and width != settings.EMBEDDING_DIMENSIONS:
@@ -225,12 +218,9 @@ def search(
 def _similarity(distance: float) -> float:
     """Turn whatever Milvus returned into "higher is closer".
 
-    With the cosine metric Milvus already reports similarity in the field it
-    calls `distance`: an identical vector scores +1.0, an unrelated one 0.0, an
-    opposite one -1.0. Measured against a live collection, not assumed.
-
-    For a true distance metric such as L2, near is a small number, so the sign
-    has to be turned around before anything compares it to a threshold.
+    With cosine, Milvus already reports similarity in the field it calls `distance`:
+    identical +1.0, unrelated 0.0, opposite -1.0. Measured against a live collection,
+    not assumed. For a true distance such as L2, the sign has to be turned around.
     """
     if settings.MILVUS_METRIC in ("COSINE", "IP"):
         return distance

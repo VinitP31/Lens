@@ -1,13 +1,11 @@
-"""Turning a cited page into a picture with the cited text highlighted.
+"""Draw a cited page as an image, with the cited sentences highlighted.
 
-What makes an answer checkable rather than merely attributable: you look at the
-page and see the sentence.
+This is how a reader checks an answer instead of taking its word: open the page, see
+the sentence.
 
-An image rather than an embedded viewer - browsers treat a page anchor in an iframe
-inconsistently, and no viewer will draw a box over an arbitrary region.
-
-Coordinates need no conversion: extraction stored every box with a top-left origin
-because that is how PyMuPDF draws.
+An image rather than an embedded PDF viewer, because browsers treat a page anchor in an
+iframe inconsistently and no viewer will draw a box over an arbitrary region.
+Coordinates need no conversion here - extraction stored them the way PyMuPDF draws.
 """
 
 import logging
@@ -67,14 +65,12 @@ def _highlight(page: pymupdf.Page, boxes: list[Box]) -> int:
 def render(pdf_path: Path | str, page_number: int, boxes: list[Box] | None = None) -> bytes:
     """A PNG of one page, with the cited regions marked.
 
-    `page_number` is 1-based, as it is everywhere a user sees it and everywhere it
-    is stored.
+    `page_number` is 1-based, as everywhere it is shown and stored. A page with no
+    boxes still renders: the page is still the source.
 
     Raises:
         PageNotFoundError: the page is outside this document.
         RenderFailedError: the file is missing or cannot be read.
-
-    A page with no boxes still renders: the page is still the source.
     """
     path = Path(pdf_path)
     if not path.exists():

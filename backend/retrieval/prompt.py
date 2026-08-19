@@ -3,8 +3,7 @@
 Assembly lives here so it can be read and tested without a network.
 
 The fixed order matters twice: providers discount a repeated prefix only if it is
-byte-identical, and the model is told what it may use before it is shown what it
-has. Reversed, the passages read as an invitation to answer however possible.
+byte-identical, and the model is told what it may use before it is shown what it has.
 
 The model never writes a document name or page number, and abstains with an exact
 string rather than prose.
@@ -15,12 +14,9 @@ from collections.abc import Sequence
 from backend.storage.vector_store import Hit
 from config import settings
 
-# The four instruction blocks, in the order the specification fixes: role and
-# scope, the grounding rule, the citation contract, then the abstention contract.
-#
-# Written as one constant rather than assembled from parts. The prefix has to be
-# byte-identical between calls for a provider to discount it, and a prompt built
-# by joining fragments invites a later change that reorders them invisibly.
+# The four instruction blocks, in the order the specification fixes: role and scope,
+# grounding, the citation contract, then abstention. One constant rather than
+# assembled parts, because the prefix must be byte-identical between calls.
 SYSTEM_PROMPT = f"""You answer questions about a set of documents that have been \
 provided to you as numbered passages.
 
@@ -48,12 +44,9 @@ the passages state it, or you reply with the exact words above."""
 def label(hit: Hit, document_name: str) -> str:
     """The source line shown above a passage: id, document, section, page.
 
-    The model is given this so it can tell the passages apart and see that they
-    come from different places, which is what makes a citation meaningful rather
-    than decorative. It is never asked to repeat any of it.
-
-    Built from the same separator and page prefix as a chunk's context header, so
-    the model sees one format everywhere instead of two that nearly match.
+    Given so the model can tell the passages apart; it is never asked to repeat any
+    of it. Built from the same separator as a chunk's context header, so the model
+    sees one format rather than two that nearly match.
     """
     parts = [document_name]
     if hit.section_path:
@@ -65,12 +58,10 @@ def label(hit: Hit, document_name: str) -> str:
 def passages(hits: Sequence[Hit], names: dict[str, str]) -> str:
     """The retrieved passages, numbered from 1.
 
-    Numbering starts at 1 because that is what the model is asked to cite and
-    what a reader sees. The offset between this and a list index is the whole
-    reason citation resolution is written once, in one place.
+    From 1 because that is what the model cites and what a reader sees; the offset
+    against a list index is why citation resolution is written in one place.
 
-    `names` maps a document id to its display name. Passed in rather than looked
-    up here, so this module needs no database and stays testable on its own.
+    `names` is passed in, so this module needs no database.
     """
     blocks = []
     for number, hit in enumerate(hits, start=1):

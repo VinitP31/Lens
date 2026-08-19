@@ -68,10 +68,9 @@ class Answer:
     # first sign the prompt's citation contract has stopped holding.
     fabricated: list[int] = field(default_factory=list)
     prompt_passages: int = 0
-    # The model answered part of the question and reported the rest as absent.
-    # Not a failure - a two-part question can be half answerable - but worth
-    # recording, because a rate that climbs means questions are routinely
-    # arriving with more parts than the retrieved passages cover.
+    # The model answered part of the question and reported the rest as absent. Not a
+    # failure, but a climbing rate means questions routinely arrive with more parts
+    # than five passages cover.
     partly_absent: bool = False
 
 

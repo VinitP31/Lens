@@ -1,13 +1,10 @@
 """The shapes the API accepts and returns.
 
-Every response carries data the caller can act on without parsing prose. That is
-why a rejection returns a `code` as well as a message: the UI decides what to
-show from the code, and the message is for the person reading it. A reworded
-message must never change which case the UI thinks it is in.
+A rejection returns a `code` as well as a message: the UI decides from the code, and
+a reworded message must never change which case it thinks it is in.
 
-Diagnostics come back on every answered turn rather than on request. They cost
-nothing to produce, and without them "why did it say that?" can only be answered
-by reproducing the question.
+Diagnostics come back on every answered turn rather than on request, because
+without them "why did it say that?" means reproducing the question.
 """
 
 from pydantic import BaseModel, Field
@@ -18,8 +15,7 @@ from backend.storage import conversations
 class ErrorResponse(BaseModel):
     """A rejection, in the one shape every failing route returns.
 
-    `code` is stable and comes from the exception type. `message` is for a human
-    and may be reworded at any time.
+    `code` comes from the exception type and is stable; `message` may be reworded.
     """
 
     code: str
@@ -47,8 +43,7 @@ class DocumentSummary(BaseModel):
 class UploadAccepted(BaseModel):
     """The reply to an upload, sent once validation has passed.
 
-    Returned before indexing starts, which is why it carries a job id: the work
-    that remains is slow, and the caller polls for it.
+    Carries a job id because indexing has not started yet and the caller polls.
     """
 
     doc_id: str
@@ -60,8 +55,7 @@ class UploadAccepted(BaseModel):
 class IngestStatus(BaseModel):
     """How far an upload has got.
 
-    `stage` is one of the ingestion statuses, so the UI maps it to wording
-    without reading `message`.
+    `stage` is one of the ingestion statuses, so the UI maps it to wording itself.
     """
 
     doc_id: str
@@ -105,9 +99,8 @@ class ConversationSummary(BaseModel):
 class CitationOut(BaseModel):
     """A citation as the UI renders it.
 
-    Every field was resolved by code at answer time and stored on the message.
-    None of it is re-read from the library when a chat is reopened, so deleting a
-    document cannot change or break an answer already given.
+    Every field was resolved at answer time and stored on the message, never re-read
+    when a chat is reopened.
     """
 
     n: int
@@ -145,10 +138,8 @@ class SendMessage(BaseModel):
 class Diagnostics(BaseModel):
     """Why this answer looks the way it does.
 
-    Returned every turn. `top_score` beside `gate_threshold` is the pair that
-    explains a refusal without anyone having to reproduce the question, and
-    `rejected_citations` is the number that says whether the model has started
-    inventing sources.
+    `top_score` beside `gate_threshold` explains a refusal without reproducing the
+    question, and `rejected_citations` says whether the model is inventing sources.
     """
 
     top_score: float | None = None

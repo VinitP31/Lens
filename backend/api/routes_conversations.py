@@ -1,13 +1,10 @@
 """Chat endpoints: create, list, read, rename or rescope, delete.
 
-Reading a chat returns its messages *and* its scope. Restoring only the messages
-would mean the same follow-up asked tomorrow searches a different set of
-documents and gives a different answer, which reads as a bug rather than as a
-setting.
+Reading a chat returns its messages and its scope, so the same follow-up asked
+tomorrow searches the same documents.
 
-Citations come back exactly as they were stored when the answer was given. They
-are never re-resolved against the library, so a document deleted since cannot
-change or break an old answer.
+Citations come back exactly as stored when the answer was given, never re-resolved,
+so a document deleted since cannot change or break an old answer.
 """
 
 from fastapi import APIRouter, Request
@@ -45,13 +42,9 @@ def _message(message) -> MessageOut:
         created_at=message.created_at,
         citations=[CitationOut(**citation) for citation in message.citations],
         intent=message.intent,
-        # A refusal is stored with no text: the wording belongs to the UI, which
-        # alone knows whether suggesting a wider selection would be honest. So an
-        # empty assistant turn is a refusal and anything else is an answer.
-        #
-        # Deliberately not "an assistant turn with no citations". A greeting has
-        # none either, and marking it a refusal made the app look as though it
-        # had failed to answer "hello".
+        # A refusal is stored with no text, because the wording belongs to the UI.
+        # Deliberately not "an assistant turn with no citations": a greeting has
+        # none either, and that made the app look as though "hello" had failed.
         abstained=message.role == conversations.ROLE_ASSISTANT and not message.content.strip(),
     )
 

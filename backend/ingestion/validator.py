@@ -1,11 +1,10 @@
-"""Checks that run before any expensive work.
+"""Decide whether an uploaded file is worth ingesting, before any slow work starts.
 
-The order is the whole design: the cheapest check that can reject a file runs
-first, because everything after this point costs seconds per page and money per
-chunk.
+Hash, size, page count, encryption, damage - in that order, cheapest first, because
+everything after this point costs seconds per page and money per chunk.
 
-Each failure raises its own type, so nothing downstream matches on wording.
-Nothing here reads the document's content.
+Each failure raises its own type, so nothing downstream has to read a message to know
+what happened. Nothing here looks at what the document says.
 """
 
 import hashlib

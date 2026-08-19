@@ -2,11 +2,9 @@
 
 Streamlit wipes session state on refresh, so none of this can live in memory.
 
-Two stored things look redundant and are not. A conversation stores its scope, so
-reopening it searches the same documents as before rather than answering a
-follow-up differently tomorrow. And a message stores its citations as JSON exactly
-as resolved at the time, never looked up again: a document deleted next week must
-not change or break an answer from today.
+Two stored things look redundant and are not: a conversation keeps its scope, so
+reopening it searches the same documents, and a message keeps its citations as
+resolved at the time, so a document deleted next week cannot change an old answer.
 """
 
 import json
@@ -188,12 +186,9 @@ def rename(connection: sqlite3.Connection, conv_id: str, title: str) -> None:
 def set_auto_title(connection: sqlite3.Connection, conv_id: str, question: str) -> None:
     """Name a chat after its first real question.
 
-    Does nothing if the chat already has a title the user chose, and nothing if
-    an automatic title is already set - the name comes from the *first* question,
-    so later ones must not rewrite it.
-
-    Greetings and questions about the app never reach here. A chat called "hi"
-    tells nobody anything.
+    Does nothing if a title is already set, chosen or automatic: the name comes from
+    the first question. Greetings never reach here - a chat called "hi" tells nobody
+    anything.
     """
     conversation = get(connection, conv_id)
     if conversation.title is not None or not conversation.title_is_auto:
