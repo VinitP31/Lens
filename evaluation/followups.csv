@@ -1,6 +1,6 @@
 opening,followup,expected_doc,expected_page,notes
 What is the most restrictive borrowing covenant and what was the actual ratio at 31 March 2025?,And what does the covenant require?,Northbridge_Logistics_Annual_Report_FY2025.pdf,23,"Reads as a whole sentence but 'the covenant' comes from the previous turn."
-What is the minimum password length in FleetLink?,And what is the maximum age?,FleetLink_TMS_User_Manual_v4.2.pdf,5,"Same table. 'Age' means password age only in context."
+What is the minimum password length in FleetLink?,And what is the maximum age?,FleetLink_TMS_User_Manual_v4.2.pdf,5,"Same table. 'Age' means password age only in context. Measured 19 Aug 2026: the one pair lost when a greeting comes earlier in the chat, because the rewrite then drops 'password' and the table is not retrieved. Passes without one."
 What was the cold chain segment margin in FY 2025?,And what was the revenue?,Northbridge_Logistics_Annual_Report_FY2025.pdf,8,"Revenue of what, and for when, both come from the previous turn."
 Who is the only authority that may approve a critical deviation?,And who investigates the deviation?,NBL_SOP_WH_014_Inbound_Receiving_Rev6.pdf,26,"'The deviation' names what the previous turn introduced."
 How are the 100 evaluation points weighted?,And how many points for fees?,26-004-crm-software-rfp-package.pdf,21,"Known miss: the rewrite keeps 'points' but drops '100 evaluation', and the top hit lands just under the gate."
