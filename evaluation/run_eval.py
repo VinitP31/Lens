@@ -27,8 +27,8 @@ from dotenv import load_dotenv  # noqa: E402
 
 from backend.errors import DuplicateDocumentError  # noqa: E402
 from backend.ingestion import embedder, prepare  # noqa: E402
-from backend.retrieval import gate, generator, retriever  # noqa: E402
-from backend.storage import registry, vector_store  # noqa: E402
+from backend.retrieval import analyzer, gate, generator, retriever  # noqa: E402
+from backend.storage import conversations, registry, vector_store  # noqa: E402
 from config import settings  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent
@@ -40,6 +40,7 @@ GATE_REASONS = frozenset(
 )
 GOLDEN_SET = EVAL_DIR / "golden_set.csv"
 OUT_OF_SCOPE = EVAL_DIR / "out_of_scope.csv"
+FOLLOWUPS = EVAL_DIR / "followups.csv"
 
 
 @dataclass
@@ -299,6 +300,94 @@ def _rule(title: str) -> None:
     print("-" * 74)
 
 
+def measure_followups(db, store) -> list[dict]:
+    """Ask each follow-up as a second turn, and see whether it survives the rewrite.
+
+    A follow-up is only searchable once the rewrite has put back what it leaves out,
+    so this measures the rewrite and retrieval together - the only way the failure
+    shows up at all. The opening question is answered first, so the history the
+    rewrite reads is a real answer rather than a stand-in.
+    """
+    by_name = _document_ids_by_name(db)
+    names = _names(db)
+    results: list[dict] = []
+
+    with FOLLOWUPS.open() as handle:
+        for row in csv.DictReader(handle):
+            expected_id = by_name.get(row["expected_doc"])
+            expected_page = int(row["expected_page"])
+
+            opening = analyzer.analyze(row["opening"])
+            found = retriever.retrieve(db, store, opening.standalone)
+            decision = gate.evaluate(found)
+            answer = ""
+            if decision.passed:
+                produced = generator.generate(opening.standalone, found.hits, names)
+                answer = produced.text or ""
+
+            history = [
+                conversations.Message(
+                    msg_id="",
+                    conv_id="",
+                    role=conversations.ROLE_USER,
+                    content=row["opening"],
+                    created_at="",
+                ),
+                conversations.Message(
+                    msg_id="",
+                    conv_id="",
+                    role=conversations.ROLE_ASSISTANT,
+                    content=answer,
+                    created_at="",
+                ),
+            ]
+
+            analysis = analyzer.analyze(row["followup"], history=history)
+            retrieved = retriever.retrieve(db, store, analysis.standalone)
+            second = gate.evaluate(retrieved)
+            page_found = any(
+                hit.doc_id == expected_id and hit.page == expected_page for hit in retrieved.hits
+            )
+
+            results.append(
+                {
+                    "followup": row["followup"],
+                    "rewritten": analysis.standalone,
+                    "score": second.top_similarity,
+                    "passed": second.passed,
+                    "page_found": page_found,
+                }
+            )
+    return results
+
+
+def report_followups(results: list[dict]) -> bool:
+    """The follow-up table. Returns whether every follow-up was answerable."""
+    print("\n" + "=" * 74)
+    print(f"FOLLOW-UPS, {len(results)} second turns")
+    print("=" * 74)
+
+    lost = [r for r in results if not (r["passed"] and r["page_found"])]
+    print(f"  answered                    {len(results) - len(lost)}/{len(results)}")
+    with_page = sum(1 for r in results if r["page_found"])
+    print(f"  expected page retrieved     {with_page}/{len(results)}")
+
+    if lost:
+        print("\n  lost, and what the rewrite produced")
+        for r in lost:
+            reason = "below the gate" if not r["passed"] else "wrong page"
+            print(f"    {r['score']:+.3f}  {reason}")
+            print(f"      asked:     {r['followup']}")
+            print(f"      searched:  {r['rewritten']}")
+
+    print(
+        "\n  A follow-up is searchable only once the rewrite has restored what it"
+        "\n  leaves out, so a loss here is the rewrite dropping the subject, not"
+        "\n  retrieval failing."
+    )
+    return not lost
+
+
 def report_answers(golden: list[Answered], out_of_scope: list[Answered]) -> bool:
     """The generation metrics table. Returns whether the stage gate is met."""
     print("\n" + "=" * 74)
@@ -493,6 +582,11 @@ def main() -> int:
     parser.add_argument("--db", type=Path, default=None, help="registry path")
     parser.add_argument("--store", type=Path, default=None, help="vector store path")
     parser.add_argument(
+        "--followups",
+        action="store_true",
+        help="also measure follow-up questions, which exercise the rewrite",
+    )
+    parser.add_argument(
         "--answers",
         action="store_true",
         help="also generate answers and measure abstention (costs model calls)",
@@ -517,6 +611,9 @@ def main() -> int:
     results = measure_golden(db, store)
     out_of_scope = measure_out_of_scope(db, store)
     clean = report(results, out_of_scope)
+
+    if args.followups:
+        clean = report_followups(measure_followups(db, store)) and clean
 
     if args.answers:
         # Left behind a flag on purpose. Retrieval and the gate are free to
