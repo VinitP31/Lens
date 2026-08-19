@@ -20,6 +20,9 @@ openai==3.0.0
 
 # PDF processing — versions verified working on macOS / Python 3.12
 docling==2.119.0
+# Imported directly by the extractor for element labels and content layers, so it
+# is pinned here rather than left to arrive as one of docling's dependencies.
+docling-core==2.91.0
 pymupdf==1.28.2
 
 # OCR, used only when a PDF has no text layer. RapidOCR needs no system package,
