@@ -2,10 +2,9 @@
 
     python scripts/make_stress_pdfs.py
 
-`stress_scanned.pdf` has no text layer at all, so it exercises OCR and the
-rejection that follows if OCR finds nothing either. `stress_two_column.pdf` sets
-prose in two columns, which reads as nonsense row by row, so it exercises the
-reading-order rule that leaves genuine columns alone.
+`stress_scanned.pdf` has no text layer, so it exercises OCR and the rejection that
+follows if OCR finds nothing. `stress_two_column.pdf` sets prose in two columns,
+which exercises the reading-order rule that leaves genuine columns alone.
 
 Generated rather than downloaded so a test can assert what should come back out.
 """

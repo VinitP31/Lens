@@ -6,8 +6,8 @@
 Pages, text density, whether OCR would trigger, headings, tables, figures, what was
 dropped as furniture, and whether every element carries a box.
 
-`--dump` also writes the extracted text by page to data/profiles/, to read beside
-the real PDF and check reading order and page attribution.
+`--dump` writes the extracted text by page to data/profiles/, to read beside the real
+PDF and check reading order.
 """
 
 import argparse
@@ -51,9 +51,8 @@ def _report(path: Path, doc: ExtractedDocument) -> None:
     if doc.contents_pages:
         print(f"  contents pages       {sorted(doc.contents_pages)}  excluded from indexing")
 
-    # An empty page is either deliberately excluded, genuinely blank, or a page
-    # the pipeline lost. Saying which is the difference between a report and a
-    # riddle.
+    # An empty page is either excluded on purpose, genuinely blank, or one the
+    # pipeline lost. Saying which is the difference between a report and a riddle.
     empty = [page for page in range(1, doc.page_count + 1) if page not in pages_seen]
     excluded = [page for page in empty if page in doc.contents_pages]
     blank = [page for page in empty if page not in doc.contents_pages]

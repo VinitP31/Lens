@@ -4,12 +4,12 @@
     python evaluation/run_eval.py               measure retrieval and the gate
     python evaluation/run_eval.py --answers     also generate, and measure abstention
 
-Retrieval is measured before generation, because no prompt can recover an answer
-retrieval missed. A hit means the expected document and page appear among the
-chunks that would be passed to the model; nothing here judges wording.
+Retrieval is measured before generation, because no prompt recovers an answer
+retrieval missed. A hit means the expected document and page appear among the chunks
+passed to the model; nothing here judges wording.
 
-The out-of-scope set is not scored - it has no correct page by definition. What it
-produces is the score distribution the gate threshold is calibrated from.
+The out-of-scope set is not scored - it has no correct page. What it produces is the
+score distribution the gate threshold is calibrated from.
 """
 
 import argparse
@@ -32,9 +32,8 @@ from backend.storage import conversations, registry, vector_store  # noqa: E402
 from config import settings  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent
-# Refusals that came from the numeric gate rather than from the model reading the
-# passages. Kept apart in the report: the two layers fail for different reasons
-# and are fixed in different places.
+# Refusals from the numeric gate rather than from the model reading the passages.
+# Kept apart in the report: the two layers fail for different reasons.
 GATE_REASONS = frozenset(
     {gate.REASON_NO_DOCUMENTS, gate.REASON_NO_MATCHES, gate.REASON_BELOW_THRESHOLD}
 )
@@ -76,14 +75,11 @@ class Result:
 def ingest_corpus(db, store, sample_dir: Path) -> None:
     """Index every PDF in `sample_dir`, skipping ones already present.
 
-    Uses the same modules as the application, in the same order, so the numbers
-    below describe the real system rather than a test harness. Extraction and
-    chunking therefore run in a worker process here too, exactly as they will in
-    the backend.
+    Uses the same modules in the same order as the application, so the numbers below
+    describe the real system rather than a harness.
     """
-    # The stress PDFs are deliberately excluded. They exist to show how the
-    # pipeline degrades on a scanned or two-column file, and indexing them would
-    # put content into the library that no evaluation question is about.
+    # The stress PDFs are excluded: indexing them would put content in the library
+    # that no evaluation question is about.
     for pdf in sorted(p for p in sample_dir.glob("*.pdf") if not p.name.startswith("stress_")):
         digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
         if registry.find_by_hash(db, digest):
@@ -103,9 +99,8 @@ def ingest_corpus(db, store, sample_dir: Path) -> None:
             continue
 
         try:
-            # One worker covers both stages: chunking needs the extracted
-            # elements, and sending those back would defeat the point of the
-            # separate process.
+            # One worker covers both stages: chunking needs the extracted elements,
+            # and sending those back would defeat the separate process.
             registry.set_status(db, document.doc_id, registry.STATUS_EXTRACTING)
             extracted = prepare.prepare(pdf, title=document.display_name)
             chunks = extracted.chunks
@@ -202,10 +197,9 @@ def _names(db) -> dict[str, str]:
 def answer_golden(db, store) -> list[Answered]:
     """Generate an answer for every answerable question.
 
-    Citation accuracy is the one thing checked beyond abstention: did any
-    validated citation land on the document and page where the golden set says
-    the fact lives. A right answer citing the wrong page is the failure this
-    system is built to prevent, and it is invisible unless measured.
+    Beyond abstention, one thing is checked: did a validated citation land on the page
+    the golden set records. A right answer citing the wrong page is the failure this
+    system exists to prevent, and it is invisible unless measured.
     """
     names = _names(db)
     by_name = _document_ids_by_name(db)
@@ -253,11 +247,9 @@ def answer_golden(db, store) -> list[Answered]:
 def answer_out_of_scope(db, store) -> list[Answered]:
     """Put every unanswerable question through the whole pipeline.
 
-    This is the measurement the build order refuses to treat as optional.
     Calibration showed the gate cannot stop an on-topic question whose answer is
-    absent, so the prompt's abstention rule is the only thing between those
-    questions and a confident, well-cited, invented answer. Assuming it works
-    would leave half the system's correctness unmeasured.
+    absent, so the prompt's abstention rule is all that stands between those questions
+    and a confident, well-cited, invented answer.
     """
     names = _names(db)
     answers: list[Answered] = []
@@ -303,10 +295,9 @@ def _rule(title: str) -> None:
 def measure_followups(db, store) -> list[dict]:
     """Ask each follow-up as a second turn, and see whether it survives the rewrite.
 
-    A follow-up is only searchable once the rewrite has put back what it leaves out,
-    so this measures the rewrite and retrieval together - the only way the failure
-    shows up at all. The opening question is answered first, so the history the
-    rewrite reads is a real answer rather than a stand-in.
+    A follow-up is searchable only once the rewrite has restored what it leaves out, so
+    the rewrite and retrieval are measured together. The opening question is answered
+    for real, so the history is genuine.
     """
     by_name = _document_ids_by_name(db)
     names = _names(db)
@@ -532,10 +523,8 @@ def report(results: list[Result], out_of_scope: list[tuple[str, float | None]]) 
 def _threshold_table(golden: list[float], out_of_scope: list[float]) -> None:
     """What each candidate threshold would cost, in both directions.
 
-    Both error rates are printed because they trade off against each other and
-    the choice between them is a judgement about this system's purpose, not
-    something a formula settles. A grounded-answers tool should prefer refusing a
-    question it could have answered over answering one it could not.
+    Both error rates are printed because they trade off, and choosing between them is a
+    judgement about this system's purpose rather than something a formula settles.
     """
     print(f"\n{'-' * 74}")
     print("WHAT EACH THRESHOLD WOULD COST")
@@ -616,9 +605,8 @@ def main() -> int:
         clean = report_followups(measure_followups(db, store)) and clean
 
     if args.answers:
-        # Left behind a flag on purpose. Retrieval and the gate are free to
-        # measure and are re-run constantly; generation costs a model call per
-        # question and is measured when something that could change it changed.
+        # A flag on purpose: retrieval and the gate are free to re-run, while
+        # generation costs a model call per question.
         clean = report_answers(answer_golden(db, store), answer_out_of_scope(db, store)) and clean
 
     db.close()

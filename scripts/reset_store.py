@@ -4,9 +4,8 @@
     python scripts/reset_store.py --yes      remove it
 
 Deleting `data/` by hand does the same thing. This says what it is about to destroy
-first - the uploaded PDFs are what citations render from - and refuses to run while
-the backend is up, since removing the vector store underneath it leaves a server
-answering from a file that no longer exists.
+first, and refuses to run while the backend is up: removing the vector store
+underneath a live server leaves it answering from a file that is gone.
 """
 
 import argparse
@@ -105,9 +104,7 @@ def main() -> int:
     for _label, path in present:
         remove(path)
 
-    # Recreated immediately, so the next start finds the directories it expects
-    # rather than creating them and looking, for one run, like a fresh install
-    # that failed halfway.
+    # Recreated immediately, so the next start finds the directories it expects.
     settings.ensure_dirs()
     print(f"\nremoved {len(present)} item(s). The next start begins with an empty library")
     return 0

@@ -69,9 +69,7 @@ def corpus_audit(sample_dir: Path) -> bool:
     # fast checks must not pay for.
     from backend.ingestion import chunker, extractor
 
-    # stress_* files are held outside the corpus on purpose: they are run through
-    # profile_pdf.py by hand, never indexed, and would fail these invariants by
-    # design.
+    # stress_* files are never indexed and would fail these invariants by design.
     pdfs = sorted(p for p in sample_dir.glob("*.pdf") if not p.name.startswith("stress_"))
     if not pdfs:
         print(f"[{FAIL}] corpus audit: no PDFs in {sample_dir}")
@@ -97,9 +95,8 @@ def corpus_audit(sample_dir: Path) -> bool:
         def note(problem: str, detail: str, document_name: str = name) -> None:
             failures.append(f"{document_name}: {problem} ({detail})")
 
-        # Text must not be lost. Two things are dropped on purpose and are not
-        # losses: a contents page, and a heading, which lives in the section path
-        # of the chunks beneath it rather than in any chunk body.
+        # Text must not be lost. Two exceptions are deliberate: a contents page, and
+        # a heading, which lives in the section path rather than in a chunk body.
         bodies = " || ".join(flat(chunk.text) for chunk in chunks)
         paths = " || ".join(flat(chunk.section_path) for chunk in chunks)
         lost = [
